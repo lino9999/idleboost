@@ -107,6 +107,15 @@ Every skin, no matter how small, keeps the project alive. Thank you.
 
 ---
 
+## Some Screenshot
+<img width="1456" height="915" alt="image" src="https://github.com/user-attachments/assets/7326a110-6516-4376-b1fc-a7f845e80abd" />
+<img width="1451" height="903" alt="image" src="https://github.com/user-attachments/assets/54f4a074-13e2-43f7-98b6-0e4fcaa4cc90" />
+<img width="1456" height="908" alt="image" src="https://github.com/user-attachments/assets/b07bad18-8495-42f0-8938-3ca96727508a" />
+<img width="1176" height="287" alt="image" src="https://github.com/user-attachments/assets/cf83adaa-8cc8-46d1-adfe-6c9c03b44127" />
+<img width="568" height="338" alt="image" src="https://github.com/user-attachments/assets/9501ff82-9141-45e1-b4d1-30a98e62152b" />
+<img width="1180" height="182" alt="image" src="https://github.com/user-attachments/assets/65847eb2-a0d1-49ed-a3bd-a1059fc97e92" />
+
+
 ## License
 
 IdleBoost is released under the MIT License. ArchiSteamFarm and its plugins belong to their respective owners.
