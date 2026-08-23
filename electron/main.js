@@ -200,6 +200,15 @@ async function boot() {
       'system'
     );
   }
+  if (store.get('freePackagesEnabled', null) === true) {
+    const fpHealed = home.healFreePackages(asfDir);
+    if (fpHealed > 0) {
+      pushLog(
+        `[Steam Warming UP] Free games redemption was missing from ${fpHealed} bot config(s) - restored it before starting ASF`,
+        'system'
+      );
+    }
+  }
   const matchCleared = home.clearMatchableTypes(asfDir);
   if (matchCleared > 0) {
     pushLog(
@@ -385,6 +394,10 @@ async function boot() {
     db,
     getAsfDir: () => asfDir,
     readSettings,
+    log: (line, stream = 'system') => {
+      pushLog(line, stream);
+      send('asf:log', { line, stream });
+    },
     getLogHistory: () => logHistory,
     getLastStatus: () => lastStatus,
     getWindow: () => win

@@ -22,7 +22,7 @@ function findBotForAccount(index, account) {
 }
 
 function register(ctx) {
-  const { getAsfDir, getWindow } = ctx;
+  const { getAsfDir, getWindow, store } = ctx;
 
   ipcMain.handle('dialog:openFiles', async (_e, opts) => {
     const result = await dialog.showOpenDialog(getWindow(), {
@@ -65,6 +65,13 @@ function register(ctx) {
         TransferableTypes: [1, 3, 5],
         MatchableTypes: []
       };
+      if (store.get('freePackagesEnabled', null) === true) {
+        cfg.EnableFreePackages = true;
+        cfg.PauseFreePackagesWhilePlaying = true;
+        cfg.PauseFreePackagesWhileFarming = true;
+        cfg.FreePackagesLimit = 25;
+        cfg.FreePackagesFilters = home.FREE_GAMES_DEFAULT_FILTERS;
+      }
       try {
         home.writeBotConfig(asfDir, name, cfg);
         results.push({ name, ok: true, hadSecret: !!acc.sharedSecret });

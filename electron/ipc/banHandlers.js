@@ -6,6 +6,7 @@ function register(ctx) {
   ipcMain.handle('ban:get', () => banChecker.getState());
   ipcMain.handle('ban:setConfig', (_e, cfg) => banChecker.setConfig(cfg));
   ipcMain.handle('ban:checkAll', () => banChecker.checkAllNow());
+  ipcMain.handle('ban:stop', () => banChecker.stopAll());
 }
 
 module.exports = { register };

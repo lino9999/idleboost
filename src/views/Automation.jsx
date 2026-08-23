@@ -35,7 +35,7 @@ function FreeGamesRedemptionCard() {
       setBusy(true);
       setSaveState('saving');
       try {
-        await asf.freePackagesApply({
+        const res = await asf.freePackagesApply({
           enabled: !!f.enabled,
           pauseWhilePlaying: true,
           pauseWhileFarming: true,
@@ -44,8 +44,17 @@ function FreeGamesRedemptionCard() {
           filtersEnabled: true,
           filters: DEFAULT_FILTERS
         });
-        setSaveState('saved');
-        setTimeout(() => setSaveState('idle'), 1400);
+        if (res && Array.isArray(res.failed) && res.failed.length > 0) {
+          setSaveState('idle');
+          const names = res.failed.map((x) => x.bot).slice(0, 3).join(', ');
+          toast(
+            `Free Games: ${res.failed.length} bot config(s) not updated (${names}${res.failed.length > 3 ? '…' : ''})`,
+            'error'
+          );
+        } else {
+          setSaveState('saved');
+          setTimeout(() => setSaveState('idle'), 1400);
+        }
         try {
           const s = await asf.freePackagesGet();
           setState(s);

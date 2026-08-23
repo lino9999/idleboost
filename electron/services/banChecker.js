@@ -3,10 +3,6 @@ const { EventEmitter } = require('events');
 const TICK_MS = 30000;
 const DEFAULTS = { autoCheck: false, useProxy: false, delayMinutes: 5, minDelayMinutes: 5 };
 
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 function clampNum(value, lo, hi, fallback) {
   const n = Number(value);
   return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : fallback;
@@ -34,6 +30,8 @@ class BanChecker extends EventEmitter {
     this.running = false;
     this.rotor = 0;
     this.timer = null;
+    this.stopRequested = false;
+    this._wake = null;
     this.lastCheckAt = Number(saved.lastCheckAt) || 0;
   }
 
@@ -67,7 +65,12 @@ class BanChecker extends EventEmitter {
     cfg.autoCheck = !!cfg.autoCheck;
     cfg.useProxy = !!cfg.useProxy;
     cfg.delayMinutes = clampNum(cfg.delayMinutes, DEFAULTS.minDelayMinutes, 10080, DEFAULTS.delayMinutes);
+    const wasAuto = this.cfg.autoCheck;
     this.cfg = cfg;
+    if (wasAuto && !cfg.autoCheck) {
+      this.stopRequested = true;
+      if (this._wake) this._wake();
+    }
     this._persist();
     this._note(`Ban checker ${cfg.autoCheck ? 'ENABLED' : 'DISABLED'} - delay ${cfg.delayMinutes}min, proxy ${cfg.useProxy ? 'on' : 'off'}`);
     this.publish();
@@ -76,19 +79,66 @@ class BanChecker extends EventEmitter {
 
   async checkAllNow() {
     if (this.running) return { skipped: true };
+    const bots = await this._getBotList();
+    if (bots.length === 0) return { done: true, total: 0 };
+
     this.running = true;
+    this.stopRequested = false;
     this.publish();
-    try {
-      const bots = await this._getBotList();
-      for (let i = 0; i < bots.length; i++) {
-        await this._checkBot(bots[i]);
-        await sleep(1500);
-      }
-    } finally {
+    this._note(`Ban check sweep started: ${bots.length} account(s), one every ${this.cfg.delayMinutes} min`);
+
+    // Fire-and-forget so the UI is not blocked for the whole (long) sweep.
+    this._runSweep(bots).finally(() => {
       this.running = false;
+      this.stopRequested = false;
+      this.lastCheckAt = Date.now();
+      this._persist();
       this.publish();
+      this._note('Ban check sweep finished');
+    });
+
+    return { started: true, total: bots.length };
+  }
+
+  async _runSweep(bots) {
+    for (let i = 0; i < bots.length; i++) {
+      if (this.stopRequested) {
+        this._note('Ban check sweep stopped');
+        break;
+      }
+      await this._checkBot(bots[i]);
+      const isLast = i === bots.length - 1;
+      if (!isLast && !this.stopRequested) {
+        await this._sleepInterruptible(this.cfg.delayMinutes * 60000);
+      }
     }
-    return { done: true };
+  }
+
+  _sleepInterruptible(ms) {
+    return new Promise((resolve) => {
+      let timer = null;
+      this._wake = () => {
+        this._wake = null;
+        if (timer) clearTimeout(timer);
+        resolve();
+      };
+      timer = setTimeout(() => {
+        this._wake = null;
+        resolve();
+      }, ms);
+    });
+  }
+
+  stopAll() {
+    this.stopRequested = true;
+    if (this._wake) this._wake();
+    if (this.cfg.autoCheck) {
+      this.cfg.autoCheck = false;
+      this._persist();
+      this._note('Ban checker DISABLED');
+    }
+    this.publish();
+    return { ok: true };
   }
 
   async tick() {

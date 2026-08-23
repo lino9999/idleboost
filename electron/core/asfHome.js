@@ -65,6 +65,7 @@ function readFreePackagesState(asfDir) {
   }
   return {
     totalBots: bots.length,
+    readableCount,
     enabledCount,
     allEnabled: readableCount > 0 && enabledCount === readableCount,
     limit: limit === null ? 25 : limit,
@@ -121,6 +122,38 @@ function applyFreePackages(asfDir, patch) {
 }
 
 const FREE_GAMES_DEFAULT_FILTERS = [{ NoCostOnly: true }, { Categories: [29] }];
+
+// Restores the FreePackages settings on bot configs that lost them (e.g. ASF
+// rewrote the json before the app kept the settings in sync). Only adds what is
+// missing, never overwrites values the user already has. Called at boot when the
+// feature is enabled, before ASF is started.
+function healFreePackages(asfDir) {
+  let changed = 0;
+  for (const name of listBotNames(asfDir)) {
+    const cfg = readBotConfig(asfDir, name);
+    if (!cfg || cfg.EnableFreePackages === true) continue;
+    cfg.EnableFreePackages = true;
+    if (cfg.PauseFreePackagesWhilePlaying !== true) {
+      cfg.PauseFreePackagesWhilePlaying = true;
+    }
+    if (cfg.PauseFreePackagesWhileFarming !== true) {
+      cfg.PauseFreePackagesWhileFarming = true;
+    }
+    if (typeof cfg.FreePackagesLimit !== 'number' || cfg.FreePackagesLimit <= 0) {
+      cfg.FreePackagesLimit = 25;
+    }
+    if (!Array.isArray(cfg.FreePackagesFilters)) {
+      cfg.FreePackagesFilters = FREE_GAMES_DEFAULT_FILTERS;
+    }
+    try {
+      writeBotConfig(asfDir, name, cfg);
+      changed += 1;
+    } catch {
+      /* skip */
+    }
+  }
+  return changed;
+}
 
 function normalizeFreePackages(asfDir) {
   let changed = 0;
@@ -429,6 +462,7 @@ module.exports = {
   readFreePackagesState,
   applyFreePackages,
   normalizeFreePackages,
+  healFreePackages,
   clearMatchableTypes,
   FREE_GAMES_DEFAULT_FILTERS,
   resolveBundledAsfDir,

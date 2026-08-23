@@ -43,14 +43,29 @@ export default function BanChecker() {
   const runAll = async () => {
     setBusy(true);
     try {
-      await asf.banCheckAll();
-      toast('Ban check pass finished', 'success');
+      const res = await asf.banCheckAll();
+      if (res && res.started) {
+        toast(`Ban check started - ${res.total} account(s), one every ${form.delayMinutes} min`, 'success');
+      } else if (res && res.skipped) {
+        toast('A ban check is already running', 'info');
+      } else {
+        toast('Nothing to check (no accounts imported)', 'success');
+      }
     } catch (e) {
       toast(e.message || 'Failed to run ban check', 'error');
     } finally {
       setBusy(false);
       load();
     }
+  };
+
+  const stopAll = async () => {
+    try {
+      await asf.banStop();
+    } catch (e) {
+      toast(e.message || 'Failed to stop ban checker', 'error');
+    }
+    load();
   };
 
   const hasApiKeys = !!(state && state.hasApiKeys);
@@ -118,13 +133,13 @@ export default function BanChecker() {
         </div>
 
         <div className="mt-4 flex items-center gap-2">
-          <Tip tip="Run a full ban-check pass over all accounts now" block>
+          <Tip tip="Check all accounts one at a time, respecting the delay set above. Runs in the background - use Stop to abort." block>
             <button className="btn-success" disabled={busy || state.running} onClick={runAll}>
               {busy || state.running ? <RefreshCw size={14} className="animate-spin" /> : <Play size={14} />} Start
             </button>
           </Tip>
-          <Tip tip="Stop the background checker" block>
-            <button className="btn-danger" disabled={!form.autoCheck} onClick={() => save({ autoCheck: false })}>
+          <Tip tip="Stop the background checker and any running sweep" block>
+            <button className="btn-danger" disabled={!form.autoCheck && !state.running} onClick={stopAll}>
               <Square size={14} /> Stop
             </button>
           </Tip>

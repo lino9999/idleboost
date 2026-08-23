@@ -114,6 +114,7 @@ contextBridge.exposeInMainWorld('asf', {
   banGet: () => invoke('ban:get'),
   banSetConfig: (cfg) => invoke('ban:setConfig', cfg),
   banCheckAll: () => invoke('ban:checkAll'),
+  banStop: () => invoke('ban:stop'),
   onBan: (cb) => on('ban:state', cb),
 
   webhookGet: () => invoke('webhook:get'),
