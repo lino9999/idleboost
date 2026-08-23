@@ -63,6 +63,12 @@ Connect a Discord webhook and get real-time alerts for what your farm is doing â
 
 Import a list of proxies in bulk and IdleBoost assigns one to each bot automatically, keeping traffic separated per account.
 
+> **Sponsor | Recommended proxies** â€” To get the most out of IdleBoost you need fast, reliable proxies. The proxies tested and recommended for this program are from **Suborbit.al** (residential & ISP):
+>
+> [![Recommended Proxies](https://img.shields.io/badge/Recommended_Proxies-Suborbit.al-2f6fed?style=for-the-badge)](https://suborbit.al/landing?r=Lino)
+>
+> **[https://suborbit.al/landing?r=Lino](https://suborbit.al/landing?r=Lino)**
+
 ### Bulk importers
 
 Add accounts in seconds by pasting a list, and import two-factor `.maFile` authenticators so trades and confirmations are handled automatically.
