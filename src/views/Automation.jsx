@@ -95,8 +95,8 @@ function FreeGamesRedemptionCard() {
       </div>
       <p className="mb-4 text-xs leading-relaxed text-slate-500">
         Watches Steam for new free packages and redeems them automatically. Redemption never interrupts card farming:
-        activations are paused while a bot is farming or playing, and resume automatically in batches (Steam allows max
-        30 activations per 1.5 hours, the default cap is 25), so requests are never spammed.
+        activations are paused while a bot is farming and resume automatically afterwards (Steam allows max 30
+        activations per 1.5 hours, the default cap is 25), so requests are never spammed.
       </p>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
