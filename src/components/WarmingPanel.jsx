@@ -108,7 +108,8 @@ export default function WarmingPanel() {
           </span>
         </div>
         <p className="mb-4 text-xs text-slate-500">
-          Start to warm bots: cards are farmed first; if a bot has no cards it idles on up to 32 owned games.
+          Start to warm bots: cards are farmed first; when a bot has no cards it idles on CS2 plus its owned games
+          (up to 32 at once).
         </p>
 
         <div className="mb-3 grid grid-cols-2 gap-3">

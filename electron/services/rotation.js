@@ -6,6 +6,7 @@ const CONNECT_GRACE_MS = 5 * 60000;
 const DISCONNECT_GRACE_MS = 3 * 60000;
 const RETRY_COOLDOWN_MS = 10 * 60000;
 const MAX_IDLE_GAMES = 32;
+const BASE_IDLE_GAME_ID = 730;
 const STOP_STAGGER_MS = 1000;
 const DEFAULTS = { enabled: false, maxActiveBots: 50, minHours: 4, maxHours: 6 };
 
@@ -242,19 +243,20 @@ class RotationEngine extends EventEmitter {
       if (!botCfgProxy && !fileProxy) result.missingProxy.push(name);
 
       const current = Array.isArray(cfg.GamesPlayedWhileIdle) ? cfg.GamesPlayedWhileIdle.map(Number).filter((n) => n > 0) : [];
-      if (current.length < MAX_IDLE_GAMES) {
-        const owned = await this._ownedGamesFor(name, bot);
-        const missing = owned.filter((id) => !current.includes(id));
-        const merged = [...current, ...missing].slice(0, MAX_IDLE_GAMES);
-        if (merged.length > current.length) {
-          cfg.GamesPlayedWhileIdle = merged;
-          try {
-            home.writeBotConfig(asfDir, name, cfg);
-            result.updatedIdle.push({ name, added: merged.length - current.length });
-            this._note(`${name}: filled GamesPlayedWhileIdle to ${merged.length} game(s)`);
-          } catch {
-            /* skip */
-          }
+      const owned = await this._ownedGamesFor(name, bot);
+      // Every bot always idles on CS2 (730) as its base game; the remaining slots
+      // (up to 32 simultaneous games) are filled with the bot's owned games.
+      const rest = [...new Set([...current, ...owned])].filter((id) => id !== BASE_IDLE_GAME_ID);
+      const merged = [BASE_IDLE_GAME_ID, ...rest].slice(0, MAX_IDLE_GAMES);
+      const changed = merged.length !== current.length || merged.some((id, i) => current[i] !== id);
+      if (changed) {
+        cfg.GamesPlayedWhileIdle = merged;
+        try {
+          home.writeBotConfig(asfDir, name, cfg);
+          result.updatedIdle.push({ name, added: Math.max(0, merged.length - current.length) });
+          this._note(`${name}: idle games set to ${merged.length} (base: CS2)`);
+        } catch {
+          /* skip */
         }
       }
       result.checked.push(name);

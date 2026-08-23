@@ -3,6 +3,7 @@ const home = require('../core/asfHome');
 
 const TICK_MS = 60000;
 const MAX_IDLE_GAMES = 32;
+const BASE_IDLE_GAME_ID = 730;
 const DEFAULTS = { enabled: true, maxGames: 30, refreshHours: 24, excludeStorage: true };
 
 function clampInt(value, lo, hi, fallback) {
@@ -131,24 +132,37 @@ class HoursBooster extends EventEmitter {
             continue;
           }
           if (Array.isArray(cfg.GamesPlayedWhileIdle) && cfg.GamesPlayedWhileIdle.length > 0) {
-            res.skipped += 1;
+            // Make sure the base game (CS2) is present even in hand-made lists.
+            const list = cfg.GamesPlayedWhileIdle.map(Number).filter((n) => n > 0);
+            if (!list.includes(BASE_IDLE_GAME_ID)) {
+              cfg.GamesPlayedWhileIdle = [BASE_IDLE_GAME_ID, ...list].slice(0, MAX_IDLE_GAMES);
+              home.writeBotConfig(this.getAsfDir(), name, cfg);
+              res.bots += 1;
+              this._record(name, cfg.GamesPlayedWhileIdle.length, 'added base game CS2 (730) to the idle list');
+            } else {
+              res.skipped += 1;
+            }
             continue;
           }
           const rows = this.db ? this.db.query('SELECT app_id FROM games WHERE bot = ?', [name]) : [];
           const ids = rows
             .map((r) => Number(r.app_id))
-            .filter((n) => Number.isFinite(n) && n > 0);
+            .filter((n) => Number.isFinite(n) && n > 0 && n !== BASE_IDLE_GAME_ID);
           if (ids.length === 0) {
-            res.skipped += 1;
-            this._record(name, 0, 'no owned games in local database (profile must be public)');
+            // No owned games known - still idle on the base game (CS2).
+            cfg.GamesPlayedWhileIdle = [BASE_IDLE_GAME_ID];
+            home.writeBotConfig(this.getAsfDir(), name, cfg);
+            res.bots += 1;
+            res.games += 1;
+            this._record(name, 1, 'no owned games in local database - idling on base game CS2 (730)');
             continue;
           }
-          const picked = pickRandom(ids, Math.min(this.cfg.maxGames, MAX_IDLE_GAMES));
-          cfg.GamesPlayedWhileIdle = picked;
+          const picked = pickRandom(ids, Math.max(0, Math.min(this.cfg.maxGames, MAX_IDLE_GAMES) - 1));
+          cfg.GamesPlayedWhileIdle = [BASE_IDLE_GAME_ID, ...picked].slice(0, MAX_IDLE_GAMES);
           home.writeBotConfig(this.getAsfDir(), name, cfg);
           res.bots += 1;
-          res.games += picked.length;
-          this._record(name, picked.length, `boosting ${picked.length}/${ids.length} owned game(s) while idle`);
+          res.games += cfg.GamesPlayedWhileIdle.length;
+          this._record(name, cfg.GamesPlayedWhileIdle.length, `boosting ${cfg.GamesPlayedWhileIdle.length}/${ids.length + 1} game(s) while idle (base: CS2)`);
         } catch (e) {
           res.errors += 1;
           this._record(name, 0, e.message);
