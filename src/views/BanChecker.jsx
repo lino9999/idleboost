@@ -117,12 +117,12 @@ export default function BanChecker() {
               <Toggle checked={!!form.useProxy} disabled={!hasProxies} onChange={(v) => save({ useProxy: v })} />
             </div>
           </Tip>
-          <Tip tip="Delay between each account check, in minutes (minimum 5)" block>
+          <Tip tip="Delay between each account check, in minutes (minimum 1)" block>
             <div>
               <label className="label">Delay between checks (min)</label>
               <input
                 type="number"
-                min="5"
+                min="1"
                 className="input"
                 value={form.delayMinutes}
                 onChange={(e) => setForm((f) => ({ ...f, delayMinutes: e.target.value }))}
@@ -133,8 +133,15 @@ export default function BanChecker() {
         </div>
 
         <div className="mt-4 flex items-center gap-2">
-          <Tip tip="Check all accounts one at a time, respecting the delay set above. Runs in the background - use Stop to abort." block>
-            <button className="btn-success" disabled={busy || state.running} onClick={runAll}>
+          <Tip
+            tip={
+              form.autoCheck
+                ? 'AutoCheck is active - the checker already runs in the background'
+                : 'Check all accounts one at a time, respecting the delay set above. Runs in the background - use Stop to abort.'
+            }
+            block
+          >
+            <button className="btn-success" disabled={busy || state.running || form.autoCheck} onClick={runAll}>
               {busy || state.running ? <RefreshCw size={14} className="animate-spin" /> : <Play size={14} />} Start
             </button>
           </Tip>

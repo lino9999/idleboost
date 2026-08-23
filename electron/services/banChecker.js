@@ -1,7 +1,7 @@
 const { EventEmitter } = require('events');
 
 const TICK_MS = 30000;
-const DEFAULTS = { autoCheck: false, useProxy: false, delayMinutes: 5, minDelayMinutes: 5 };
+const DEFAULTS = { autoCheck: false, useProxy: false, delayMinutes: 5, minDelayMinutes: 1 };
 
 function clampNum(value, lo, hi, fallback) {
   const n = Number(value);
