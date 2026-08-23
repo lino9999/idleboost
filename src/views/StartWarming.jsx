@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Activity, Hourglass, ListOrdered, Play, Power, Save, Square, Timer } from 'lucide-react';
+import { Activity, Hourglass, ListOrdered, Loader2, Play, Power, Save, Square, Timer } from 'lucide-react';
 import Tip from '../components/Tip';
 import Toggle from '../components/Toggle';
 import { asf } from '../lib/api';
@@ -164,7 +164,14 @@ export default function StartWarming() {
         stopActive: isToggle && !enabled
       });
       setForm((f) => ({ ...f, enabled }));
-      toast(isToggle ? (enabled ? 'Warming engine started' : 'Warming engine stopped - active bots stopped') : 'Start Warming settings saved', 'success');
+      toast(
+        isToggle
+          ? enabled
+            ? 'Warming engine started'
+            : 'Warming engine stopped - bots are being disabled one by one'
+          : 'Start Warming settings saved',
+        'success'
+      );
     } catch (e) {
       toast(e.message || 'Failed to save settings', 'error');
     }
@@ -174,6 +181,7 @@ export default function StartWarming() {
   const active = (state && state.active) || [];
   const queue = (state && state.queue) || [];
   const recent = (state && state.recent) || [];
+  const stoppingAll = (state && state.stoppingAll) || null;
 
   return (
     <div className="space-y-5">
@@ -192,16 +200,24 @@ export default function StartWarming() {
 
           <div className="mb-4 grid grid-cols-2 gap-3">
             <Tip tip={cfg.enabled ? 'The warming engine is already running' : 'Start the warming engine with the settings below'} block>
-              <button className="btn-success w-full" disabled={!!cfg.enabled} onClick={() => save(true)}>
+              <button className="btn-success w-full" disabled={!!cfg.enabled || !!stoppingAll} onClick={() => save(true)}>
                 <Play size={15} /> Start
               </button>
             </Tip>
-            <Tip tip={!cfg.enabled ? 'The warming engine is already stopped' : 'Stop the warming engine and stop all active warming bots'} block>
-              <button className="btn-danger w-full" disabled={!cfg.enabled} onClick={() => save(false)}>
-                <Square size={15} /> Stop
+            <Tip tip={!cfg.enabled && !stoppingAll ? 'The warming engine is already stopped' : 'Stop the engine and disable every bot one by one (1 per second)'} block>
+              <button className="btn-danger w-full" disabled={(!cfg.enabled && !stoppingAll) || !!stoppingAll} onClick={() => save(false)}>
+                {stoppingAll ? <Loader2 size={15} className="animate-spin" /> : <Square size={15} />}{' '}
+                {stoppingAll ? `Stopping ${stoppingAll.stopped}/${stoppingAll.total}…` : 'Stop'}
               </button>
             </Tip>
           </div>
+
+          {stoppingAll && (
+            <p className="mb-3 text-[11px] text-slate-400">
+              Disabling accounts one by one so they don&apos;t all drop offline at once —{' '}
+              <span className="font-mono text-steam">{stoppingAll.stopped}/{stoppingAll.total}</span> stopped
+            </p>
+          )}
 
           <div className="space-y-4">
             <Tip tip="Absolute maximum number of bots allowed to farm simultaneously" block>

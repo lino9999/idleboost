@@ -86,7 +86,7 @@ export default function WarmingPanel() {
         stopActive: true
       });
       setForm((f) => ({ ...f, enabled: false }));
-      toast('Warming engine stopped - all bots disabled', 'success');
+      toast('Warming engine stopped - bots are being disabled one by one', 'success');
     } catch (e) {
       toast(e.message || 'Failed to stop warming', 'error');
     }
@@ -95,6 +95,7 @@ export default function WarmingPanel() {
   const cfg = (state && state.config) || form;
   const active = (state && state.active) || [];
   const queue = (state && state.queue) || [];
+  const stoppingAll = (state && state.stoppingAll) || null;
   const max = Number(form.maxActiveBots) || cfg.maxActiveBots;
 
   return (
@@ -121,20 +122,26 @@ export default function WarmingPanel() {
             }
             block
           >
-            <button className="btn-success w-full" disabled={starting || !!cfg.enabled || standby || active.length > 0} onClick={doStart}>
+            <button className="btn-success w-full" disabled={starting || !!cfg.enabled || standby || active.length > 0 || !!stoppingAll} onClick={doStart}>
               {starting ? <Loader2 size={15} className="animate-spin" /> : <Play size={15} />}
               {starting ? 'Starting…' : 'Start'}
             </button>
           </Tip>
-          <Tip tip={!cfg.enabled && active.length === 0 ? 'Nothing to stop' : 'Stop the engine and disable every bot'} block>
-            <button className="btn-danger w-full" disabled={!cfg.enabled && active.length === 0} onClick={doStop}>
-              <Square size={15} /> Stop
+          <Tip tip={!cfg.enabled && active.length === 0 ? 'Nothing to stop' : 'Stop the engine and disable every bot one by one (1 per second)'} block>
+            <button className="btn-danger w-full" disabled={(!cfg.enabled && active.length === 0) || !!stoppingAll} onClick={doStop}>
+              {stoppingAll ? <Loader2 size={15} className="animate-spin" /> : <Square size={15} />} {stoppingAll ? `Stopping ${stoppingAll.stopped}/${stoppingAll.total}…` : 'Stop'}
             </button>
           </Tip>
         </div>
         {starting && checkingBot && (
           <p className="mb-2 text-[11px] text-slate-400">
             checking <span className="font-mono text-steam">{checkingBot}</span>…
+          </p>
+        )}
+        {stoppingAll && (
+          <p className="mb-2 text-[11px] text-slate-400">
+            Disabling accounts one by one so they don&apos;t all drop offline at once —{' '}
+            <span className="font-mono text-steam">{stoppingAll.stopped}/{stoppingAll.total}</span> stopped
           </p>
         )}
 

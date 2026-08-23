@@ -6,7 +6,12 @@ const CONNECT_GRACE_MS = 5 * 60000;
 const DISCONNECT_GRACE_MS = 3 * 60000;
 const RETRY_COOLDOWN_MS = 10 * 60000;
 const MAX_IDLE_GAMES = 32;
+const STOP_STAGGER_MS = 1000;
 const DEFAULTS = { enabled: false, maxActiveBots: 50, minHours: 4, maxHours: 6 };
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function rand(min, max) {
   return min + Math.random() * Math.max(0, max - min);
@@ -48,6 +53,7 @@ class RotationEngine extends EventEmitter {
     this.recent = [];
     this.standby = false;
     this.startCooldown = {};
+    this.stoppingAll = null;
   }
 
   start() {
@@ -92,14 +98,7 @@ class RotationEngine extends EventEmitter {
       this.manualActive = {};
       this._persist();
       this._note('Stopping ALL bots');
-      this.api
-        .getBots()
-        .then((bots) => {
-          for (const n of Object.keys(bots || {})) {
-            this.api.setBotEnabled(n, false).catch(() => {});
-          }
-        })
-        .catch(() => {});
+      this._stopAllStaggered().catch(() => {});
     }
 
     this._note(
@@ -158,6 +157,57 @@ class RotationEngine extends EventEmitter {
     delete this.manualActive[name];
     this._persist();
     this._note(`Stopped ${name} manually`);
+    this.publish();
+    return { ok: true };
+  }
+
+  // Stops every enabled bot one at a time with a fixed delay in between, so the
+  // accounts do not all drop offline in the same instant (looks suspicious to Steam).
+  async _stopAllStaggered() {
+    if (this.stoppingAll) return;
+    let names = [];
+    try {
+      const bots = (await this.api.getBots()) || {};
+      names = Object.keys(bots)
+        .filter((n) => bots[n] && bots[n].BotConfig && bots[n].BotConfig.Enabled !== false)
+        .sort((a, b) => a.localeCompare(b));
+    } catch (e) {
+      this._note(`Failed to list bots for staggered stop: ${e.message}`);
+      return;
+    }
+    if (names.length === 0) {
+      this._note('No enabled bots to stop');
+      this.publish();
+      return;
+    }
+    this.stoppingAll = { stopped: 0, total: names.length };
+    this.publish();
+    this._note(`Stopping ${names.length} bot(s) one by one (${Math.round(STOP_STAGGER_MS / 1000)}s apart)...`);
+    try {
+      for (const name of names) {
+        if (!this.stoppingAll) break;
+        try {
+          await this.api.setBotEnabled(name, false);
+        } catch (e) {
+          this._note(`Failed to stop ${name}: ${e.message}`);
+        }
+        if (!this.stoppingAll) break;
+        this.stoppingAll.stopped += 1;
+        this.publish();
+        await sleep(STOP_STAGGER_MS);
+      }
+      if (this.stoppingAll) {
+        this._note(`Staggered stop finished - ${this.stoppingAll.stopped}/${names.length} bot(s) disabled`);
+      }
+    } finally {
+      this.stoppingAll = null;
+      this.publish();
+    }
+  }
+
+  stopStaggered() {
+    // Interrupts an in-progress staggered stop.
+    this.stoppingAll = null;
     this.publish();
     return { ok: true };
   }
@@ -437,6 +487,7 @@ class RotationEngine extends EventEmitter {
       totalBots: Object.keys(bots).length,
       connectedCount: Object.values(bots).filter((b) => b.IsConnectedAndLoggedOn).length,
       maxActiveBots: this.cfg.maxActiveBots,
+      stoppingAll: this.stoppingAll ? { ...this.stoppingAll } : null,
       recent: this.recent.slice(-30).reverse(),
       lastTick: now
     };
