@@ -15,7 +15,6 @@ function FreeGamesRedemptionCard() {
   const [busy, setBusy] = useState(false);
   const [saveState, setSaveState] = useState('idle');
   const loaded = useRef(false);
-  const applyTimer = useRef(null);
 
   useEffect(() => {
     let alive = true;
@@ -37,7 +36,7 @@ function FreeGamesRedemptionCard() {
       setSaveState('saving');
       try {
         await asf.freePackagesApply({
-          enabled: f.enabled,
+          enabled: !!f.enabled,
           pauseWhilePlaying: true,
           pauseWhileFarming: true,
           limit: f.limit,
@@ -48,7 +47,10 @@ function FreeGamesRedemptionCard() {
         setSaveState('saved');
         setTimeout(() => setSaveState('idle'), 1400);
         try {
-          setState(await asf.freePackagesGet());
+          const s = await asf.freePackagesGet();
+          setState(s);
+          // Reflect the real persisted state so the toggle never drifts on re-mount.
+          setForm((prev) => ({ ...prev, enabled: !!(s && s.allEnabled), limit: s ? s.limit : prev.limit }));
         } catch {
           /* ignore */
         }
@@ -60,16 +62,6 @@ function FreeGamesRedemptionCard() {
       }
     },
     [toast]
-  );
-
-  const changeApplied = useCallback(
-    (nextForm) => {
-      setForm(nextForm);
-      if (!loaded.current) return;
-      if (applyTimer.current) clearTimeout(applyTimer.current);
-      applyTimer.current = setTimeout(() => doApply(nextForm), 250);
-    },
-    [doApply]
   );
 
   if (!state && !loaded.current) {
@@ -115,7 +107,11 @@ function FreeGamesRedemptionCard() {
               checked={!!form.enabled}
               disabled={busy}
               tip={form.enabled ? 'Free games redemption is enabled for all bots' : 'Free games redemption is disabled for all bots'}
-              onChange={(v) => changeApplied({ ...form, enabled: v })}
+              onChange={(v) => {
+                const next = { ...form, enabled: v };
+                setForm(next);
+                if (loaded.current) doApply(next);
+              }}
             />
           </div>
         </Tip>

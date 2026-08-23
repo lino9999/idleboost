@@ -33,6 +33,7 @@ function readFreePackagesState(asfDir) {
   const bots = listBotNames(asfDir);
   const perBot = {};
   let enabledCount = 0;
+  let readableCount = 0;
   let limit = null;
   let pausePlaying = null;
   let pauseFarming = null;
@@ -40,7 +41,12 @@ function readFreePackagesState(asfDir) {
   let filtersEnabled = false;
   let filtersText = '';
   for (const name of bots) {
-    const cfg = readBotConfig(asfDir, name) || {};
+    const cfg = readBotConfig(asfDir, name);
+    if (!cfg) {
+      perBot[name] = { enabled: false };
+      continue;
+    }
+    readableCount += 1;
     const enabled = cfg.EnableFreePackages === true;
     if (enabled) enabledCount += 1;
     perBot[name] = { enabled };
@@ -60,7 +66,7 @@ function readFreePackagesState(asfDir) {
   return {
     totalBots: bots.length,
     enabledCount,
-    allEnabled: bots.length > 0 && enabledCount === bots.length,
+    allEnabled: readableCount > 0 && enabledCount === readableCount,
     limit: limit === null ? 25 : limit,
     perHour: perHour === null ? 0 : perHour,
     pauseWhilePlaying: pausePlaying === null ? true : pausePlaying,
