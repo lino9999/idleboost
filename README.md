@@ -1,4 +1,4 @@
-# IdleBoost
+# IdleBoost - beta
 
 **The all-in-one desktop manager for warming and growing Steam accounts, powered by ArchiSteamFarm.**
 
