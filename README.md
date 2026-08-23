@@ -77,7 +77,7 @@ Watch the full ASF output in real time, color-coded by source, for easy troubles
 
 IdleBoost is a portable app — no installation required.
 
-1. Download the latest release (`IdleBoost-x.x.x-Portable.exe`).
+1. Download the latest release (`IdleBoost.exe`).
 2. Run it. ArchiSteamFarm is bundled and starts automatically.
 3. Import your accounts from the **Importers** section.
 4. Press **Start** on the dashboard to begin warming.
@@ -99,7 +99,7 @@ IdleBoost builds on ArchiSteamFarm, a mature and widely used open-source project
 
 IdleBoost is free and developed in my spare time. If it helps you, consider donating some Steam skins to help my bot farm grow.
 
-[![Donate Skins](https://img.shields.io/badge/Donate_Steam_Skins-help_my_farm_grow-1b2838?style=for-the-badge&logo=steam&logoColor=66c0f4)](https://steamcommunity.com/tradeoffer/new/?partner=184539136&token=-gLggeA0)
+[![Donate Skins](https://img.shields.io/badge/Donate_Steam_Skins-1b2838?style=for-the-badge&logo=steam&logoColor=66c0f4)](https://steamcommunity.com/tradeoffer/new/?partner=184539136&token=-gLggeA0)
 
 **Send a trade offer here:** [steamcommunity.com/tradeoffer/new/?partner=184539136&token=-gLggeA0](https://steamcommunity.com/tradeoffer/new/?partner=184539136&token=-gLggeA0)
 
