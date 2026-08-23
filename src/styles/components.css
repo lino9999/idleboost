@@ -1,0 +1,17 @@
+@layer components {
+  .card {
+    @apply rounded-xl border border-white/[0.06] bg-night-850 shadow-lg shadow-black/20;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold;
+  }
+  .donate-btn {
+    @apply relative flex w-full items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-xs font-bold text-slate-200 transition-transform duration-200 hover:scale-[1.03];
+    border: 2px solid transparent;
+    background:
+      linear-gradient(#131b2c, #131b2c) padding-box,
+      linear-gradient(115deg, #ff5f6d, #ffc371, #47e5bc, #66c0f4, #7c5cff, #ff5f6d) border-box;
+    background-size: 100% 100%, 300% 300%;
+    animation: rainbow-pan 4s linear infinite;
+  }
+}

@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <!-- Gradiente con i colori di Steam -->
+    <linearGradient id="steamBoost" x1="10%" y1="100%" x2="90%" y2="0%">
+      <stop offset="0%" stop-color="#1b2838" />   <!-- Steam Dark Blue -->
+      <stop offset="40%" stop-color="#2a475e" />  <!-- Steam Mid Blue -->
+      <stop offset="100%" stop-color="#66c0f4" /> <!-- Steam Light Blue -->
+    </linearGradient>
+    
+    <!-- Effetto ombra per dare profondità alla GUI -->
+    <filter id="dropShadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="2" dy="5" stdDeviation="4" flood-color="#000000" flood-opacity="0.4"/>
+    </filter>
+  </defs>
+
+  <!-- Simbolo principale: Fulmine direzionale verso l'alto (senza sfondo) -->
+  <g filter="url(#dropShadow)">
+    <path d="M 128 20 L 210 110 L 145 110 L 160 230 L 46 125 L 110 125 Z" 
+          fill="url(#steamBoost)" 
+          stroke="#c7d5e0" 
+          stroke-width="3" 
+          stroke-linejoin="round"/>
+  </g>
+</svg>

@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dist-release/
+
+# ArchiSteamFarm runtime (binaries + configs + secrets). Place ASF in ./asf to run.
+# NOTE: leading slash = top-level only, so electron/asf/ (source) is NOT ignored.
+/asf/
+
+# Reference docs (not part of the source repo)
+/asf docs/
+
+# Local data / secrets (these can appear anywhere)
+*.log
+*.maFile
+
+# AI tooling / local agent config (top-level)
+/AGENTS.md
+/opencode.jsonc
+/.opencodeignore

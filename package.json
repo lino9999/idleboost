@@ -1,0 +1,76 @@
+{
+  "name": "steam-warming-up",
+  "productName": "IdleBoost",
+  "version": "1.0.4",
+  "description": "IdleBoost",
+  "author": "Steam Warming UP",
+  "license": "MIT",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "concurrently -k -n VITE,ELECTRON -c cyan,green \"vite\" \"wait-on tcp:127.0.0.1:5173 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .\"",
+    "build": "vite build",
+    "start": "npm run build && electron .",
+    "dist": "npm run build && electron-builder --win --x64"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/addon-web-links": "^0.11.0",
+    "@xterm/xterm": "^5.5.0",
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^9.1.0",
+    "cross-env": "^7.0.3",
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
+    "lucide-react": "^0.468.0",
+    "postcss": "^8.4.49",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwindcss": "^3.4.16",
+    "vite": "^5.4.11",
+    "wait-on": "^8.0.1"
+  },
+  "build": {
+    "appId": "com.steamwarmingup.desktop",
+    "productName": "IdleBoost",
+    "copyright": "Steam Warming UP",
+    "directories": {
+      "output": "dist-release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "asf",
+        "to": "asf",
+        "filter": [
+          "**/*",
+          "!logs/**",
+          "!config/**"
+        ]
+      }
+    ],
+    "asar": true,
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-Portable.${ext}"
+    }
+  },
+  "dependencies": {
+    "sql.js": "^1.14.1"
+  }
+}

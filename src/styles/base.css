@@ -1,0 +1,26 @@
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    @apply bg-night-950 text-slate-200 antialiased;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-night-600;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-night-500;
+  }
+}
