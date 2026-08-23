@@ -107,7 +107,7 @@ Every skin, no matter how small, keeps the project alive. Thank you.
 
 ---
 
-## Some Screenshot
+## Some Screenshots
 <img width="1456" height="915" alt="image" src="https://github.com/user-attachments/assets/7326a110-6516-4376-b1fc-a7f845e80abd" />
 <img width="1451" height="903" alt="image" src="https://github.com/user-attachments/assets/54f4a074-13e2-43f7-98b6-0e4fcaa4cc90" />
 <img width="1456" height="908" alt="image" src="https://github.com/user-attachments/assets/b07bad18-8495-42f0-8938-3ca96727508a" />
