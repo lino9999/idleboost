@@ -335,6 +335,7 @@ async function boot() {
     api,
     store,
     notifier,
+    db,
     log: (line) => pushLog(line, 'banchecker')
   });
   cardWatcher = new CardWatcher({

@@ -49,7 +49,7 @@ export default function BanChecker() {
       } else if (res && res.skipped) {
         toast('A ban check is already running', 'info');
       } else {
-        toast('Nothing to check (no accounts imported)', 'success');
+        toast('No checkable accounts - no SteamID could be resolved (connect the accounts once or set an API key)', 'error');
       }
     } catch (e) {
       toast(e.message || 'Failed to run ban check', 'error');

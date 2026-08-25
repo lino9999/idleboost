@@ -14,11 +14,12 @@ function randomOf(arr) {
 }
 
 class BanChecker extends EventEmitter {
-  constructor({ api, store, notifier, log }) {
+  constructor({ api, store, notifier, db, log }) {
     super();
     this.api = api;
     this.store = store;
     this.notifier = notifier;
+    this.db = db || null;
     this.log = log || (() => {});
     const saved = store.get('ban-checker', {}) || {};
     this.cfg = {
@@ -173,15 +174,92 @@ class BanChecker extends EventEmitter {
     }
   }
 
+  // Builds the list of accounts to check. Every imported account is included
+  // even when it is disabled / not connected to ASF: the SteamID is taken from
+  // the running bot when available, otherwise from the local database (stored
+  // after the first successful sync), and as a last resort it is resolved from
+  // the login name via the Steam Web API.
   async _getBotList() {
+    const steamIds = new Map();
+    const logins = new Map();
+
     try {
       const bots = (await this.api.getBots()) || {};
-      return Object.entries(bots)
-        .filter(([, bot]) => bot.SteamID && String(bot.SteamID) !== '0')
-        .map(([name, bot]) => ({ name, steamId: String(bot.SteamID) }))
-        .sort((a, b) => a.name.localeCompare(b.name));
+      for (const [name, bot] of Object.entries(bots)) {
+        const sid = bot && bot.SteamID ? String(bot.SteamID) : '';
+        steamIds.set(name, sid && sid !== '0' ? sid : '');
+        const login = bot && bot.BotConfig && bot.BotConfig.SteamLogin ? String(bot.BotConfig.SteamLogin) : '';
+        if (login) logins.set(name, login);
+      }
     } catch {
-      return [];
+      /* ASF not reachable - fall back to the local database below */
+    }
+
+    if (this.db) {
+      try {
+        const rows = this.db.query('SELECT name, steam_login, steam_id FROM bots');
+        for (const row of rows || []) {
+          if (!row || !row.name) continue;
+          if (!steamIds.has(row.name)) steamIds.set(row.name, '');
+          const sid = row.steam_id ? String(row.steam_id) : '';
+          if (sid && sid !== '0' && !steamIds.get(row.name)) steamIds.set(row.name, sid);
+          if (!logins.get(row.name) && row.steam_login) logins.set(row.name, String(row.steam_login));
+        }
+      } catch {
+        /* db optional */
+      }
+    }
+
+    const keys = this.store.get('steam-api-keys', []) || [];
+    const unknown = [...steamIds.entries()].filter(([, sid]) => !sid).map(([name]) => name);
+    if (unknown.length > 0 && keys.length > 0) {
+      this._note(`Resolving the SteamID of ${unknown.length} account(s) that never connected...`);
+      for (const name of unknown) {
+        if (this.stopRequested) break;
+        const login = logins.get(name);
+        if (!login) continue;
+        try {
+          const key = randomOf(keys);
+          const res = await fetch(
+            `https://api.steampowered.com/ISteamUser/ResolveVanityURL/v1/?key=${encodeURIComponent(key)}&vanityurl=${encodeURIComponent(login)}`,
+            { signal: AbortSignal.timeout(15000) }
+          );
+          const json = await res.json();
+          const sid = json && json.response && json.response.success === 1 ? String(json.response.steamid) : '';
+          if (sid) {
+            steamIds.set(name, sid);
+            this._persistSteamId(name, login, sid);
+          } else {
+            this._note(`${name}: Steam still does not resolve this login to a SteamID - skipped`);
+          }
+        } catch (e) {
+          this._note(`${name}: SteamID resolution failed (${e.message}) - skipped`);
+        }
+      }
+    }
+
+    return [...steamIds.entries()]
+      .filter(([, sid]) => !!sid)
+      .map(([name, steamId]) => ({ name, steamId }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  _persistSteamId(name, login, steamId) {
+    if (!this.db) return;
+    try {
+      const existing = this.db.one('SELECT name FROM bots WHERE name = ?', [name]);
+      if (existing) {
+        this.db.run('UPDATE bots SET steam_id = ? WHERE name = ?', [steamId, name]);
+      } else {
+        const now = Date.now();
+        this.db.run(
+          'INSERT INTO bots (name, steam_login, steam_id, first_seen, last_seen) VALUES (?, ?, ?, ?, ?)',
+          [name, login, steamId, now, now]
+        );
+      }
+      this.db.scheduleSave && this.db.scheduleSave();
+    } catch {
+      /* not critical */
     }
   }
 
