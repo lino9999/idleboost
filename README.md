@@ -103,7 +103,7 @@ IdleBoost builds on ArchiSteamFarm, a mature and widely used open-source project
 
 ## Support the project
 
-IdleBoost is free and developed in my spare time. If it helps you, consider donating some Steam skins to help my bot farm grow.
+IdleBoost is free and developed in my spare time. If it helps you, consider donating some Steam skins.
 
 [![Donate Skins](https://img.shields.io/badge/Donate_Steam_Skins-1b2838?style=for-the-badge&logo=steam&logoColor=66c0f4)](https://steamcommunity.com/tradeoffer/new/?partner=184539136&token=-gLggeA0)
 
