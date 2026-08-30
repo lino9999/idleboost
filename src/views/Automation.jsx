@@ -14,6 +14,7 @@ function FreeGamesRedemptionCard() {
   const [form, setForm] = useState({ enabled: false, limit: 25 });
   const [busy, setBusy] = useState(false);
   const [saveState, setSaveState] = useState('idle');
+  const [proxyCount, setProxyCount] = useState(null);
   const loaded = useRef(false);
 
   useEffect(() => {
@@ -27,11 +28,22 @@ function FreeGamesRedemptionCard() {
       });
       loaded.current = true;
     }).catch(() => {});
+    asf.proxyList().then((p) => {
+      if (!alive) return;
+      setProxyCount(Object.keys(p || {}).length);
+    }).catch(() => setProxyCount(0));
     return () => { alive = false; };
   }, []);
 
+  const hasProxies = (proxyCount || 0) > 0;
+
   const doApply = useCallback(
     async (f) => {
+      if (f.enabled && !hasProxies) {
+        toast('Free games redemption requires proxies - import them in Proxy Manager first', 'error');
+        setForm((prev) => ({ ...prev, enabled: false }));
+        return;
+      }
       setBusy(true);
       setSaveState('saving');
       try {
@@ -70,7 +82,7 @@ function FreeGamesRedemptionCard() {
         setBusy(false);
       }
     },
-    [toast]
+    [toast, hasProxies]
   );
 
   if (!state && !loaded.current) {
@@ -109,21 +121,35 @@ function FreeGamesRedemptionCard() {
       </p>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <Tip tip="Enable or disable free games redemption on ALL bots at once." block>
-          <div className="flex items-center justify-between rounded-lg bg-night-800/70 px-3 py-2.5">
-            <span className="text-xs font-semibold text-slate-300">Enable (all bots)</span>
-            <Toggle
-              checked={!!form.enabled}
-              disabled={busy}
-              tip={form.enabled ? 'Free games redemption is enabled for all bots' : 'Free games redemption is disabled for all bots'}
-              onChange={(v) => {
-                const next = { ...form, enabled: v };
-                setForm(next);
-                if (loaded.current) doApply(next);
-              }}
-            />
-          </div>
-        </Tip>
+        <div>
+          <Tip
+            tip={
+              !hasProxies
+                ? 'Proxies are required before enabling free games redemption - import them in Proxy Manager'
+                : 'Enable or disable free games redemption on ALL bots at once.'
+            }
+            block
+          >
+            <div className="flex items-center justify-between rounded-lg bg-night-800/70 px-3 py-2.5">
+              <span className="text-xs font-semibold text-slate-300">Enable (all bots)</span>
+              <Toggle
+                checked={!!form.enabled}
+                disabled={busy || (!hasProxies && !form.enabled)}
+                tip={form.enabled ? 'Free games redemption is enabled for all bots' : 'Free games redemption is disabled for all bots'}
+                onChange={(v) => {
+                  const next = { ...form, enabled: v };
+                  setForm(next);
+                  if (loaded.current) doApply(next);
+                }}
+              />
+            </div>
+          </Tip>
+          {!hasProxies && (
+            <p className="mt-2 text-[11px] font-medium text-amber-300/90">
+              Proxies required - import them in Proxy Manager to enable free games redemption.
+            </p>
+          )}
+        </div>
 
         <Tip tip="Maximum packages activated per 1.5 hours (Steam allows 30; the default cap is 25)." block>
           <div>
