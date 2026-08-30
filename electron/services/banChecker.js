@@ -1,8 +1,7 @@
 ﻿const { EventEmitter } = require('events');
 
 const TICK_MS = 5000;
-const DEFAULTS = { autoCheck: false, useProxy: false, delaySeconds: 1, minDelaySeconds: 1, collectStats: true };
-const CS2_APP_ID = 730;
+const DEFAULTS = { autoCheck: false, useProxy: false, delaySeconds: 1, minDelaySeconds: 1 };
 
 function clampNum(value, lo, hi, fallback) {
   const n = Number(value);
@@ -31,8 +30,7 @@ class BanChecker extends EventEmitter {
     this.cfg = {
       autoCheck: !!saved.autoCheck,
       useProxy: !!saved.useProxy,
-      delaySeconds: clampNum(delaySeconds, DEFAULTS.minDelaySeconds, 86400, DEFAULTS.delaySeconds),
-      collectStats: saved.collectStats !== false
+      delaySeconds: clampNum(delaySeconds, DEFAULTS.minDelaySeconds, 86400, DEFAULTS.delaySeconds)
     };
     this.status = saved.status || {};
     this.running = false;
@@ -73,7 +71,6 @@ class BanChecker extends EventEmitter {
     cfg.autoCheck = !!cfg.autoCheck;
     cfg.useProxy = !!cfg.useProxy;
     cfg.delaySeconds = clampNum(cfg.delaySeconds, DEFAULTS.minDelaySeconds, 86400, DEFAULTS.delaySeconds);
-    cfg.collectStats = cfg.collectStats !== false;
     const wasAuto = this.cfg.autoCheck;
     this.cfg = cfg;
     if (wasAuto && !cfg.autoCheck) {
@@ -81,9 +78,7 @@ class BanChecker extends EventEmitter {
       if (this._wake) this._wake();
     }
     this._persist();
-    this._note(
-      `Ban checker ${cfg.autoCheck ? 'ENABLED' : 'DISABLED'} - delay ${cfg.delaySeconds}s, proxy ${cfg.useProxy ? 'on' : 'off'}, stats ${cfg.collectStats ? 'on' : 'off'}`
-    );
+    this._note(`Ban checker ${cfg.autoCheck ? 'ENABLED' : 'DISABLED'} - delay ${cfg.delaySeconds}s, proxy ${cfg.useProxy ? 'on' : 'off'}`);
     this.publish();
     return this.getConfig();
   }
@@ -351,9 +346,7 @@ class BanChecker extends EventEmitter {
         };
         this._note(`${bot.name}: clear`);
       }
-      if (this.cfg.collectStats) {
-        await this._collectStats(bot, key);
-      }
+      await this._collectAccountAge(bot, key);
     } catch (e) {
       this.status[bot.name] = { state: 'error', detail: e.message, at: Date.now() };
       this._note(`${bot.name}: ban check failed (${e.message})`);
@@ -362,70 +355,32 @@ class BanChecker extends EventEmitter {
     this.publish();
   }
 
-  // Extra account info via the Steam Web API: profile summary (account age, last
-  // logoff, online/visibility state) and CS2 achievement progress. No cookies are
-  // involved - everything runs through the API key (and the optional proxy).
-  async _collectStats(bot, key) {
+  // Fetches just the account creation date (GetPlayerSummaries) so the dashboard
+  // can show the account age. Runs through the API key (and the optional proxy).
+  async _collectAccountAge(bot, key) {
     if (!this.db) return;
-    const stats = {
-      achievements_unlocked: null,
-      achievements_total: null,
-      account_created: null,
-      last_logoff: null,
-      persona_state: null,
-      visibility: null
-    };
     try {
       const summaryUrl = `https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/?key=${encodeURIComponent(key)}&steamids=${encodeURIComponent(bot.steamId)}`;
       const sj = await this._fetchSteamApi(summaryUrl);
       const p = sj && sj.response && Array.isArray(sj.response.players) ? sj.response.players[0] : null;
-      if (p) {
-        stats.account_created = Number(p.timecreated) || null;
-        stats.last_logoff = Number(p.lastlogoff) || null;
-        const ps = Number(p.personastate);
-        stats.persona_state = Number.isFinite(ps) ? ps : null;
-        const vis = Number(p.communityvisibilitystate);
-        stats.visibility = Number.isFinite(vis) ? vis : null;
-      }
-    } catch (e) {
-      this._note(`${bot.name}: GetPlayerSummaries failed (${e.message})`);
+      const created = p ? Number(p.timecreated) || null : null;
+      if (created) this._saveAccountAge(bot.name, created);
+    } catch {
+      /* non-critical - the ban result is already recorded */
     }
-    try {
-      const achUrl = `https://api.steampowered.com/ISteamUserStats/GetPlayerAchievements/v1/?key=${encodeURIComponent(key)}&steamid=${encodeURIComponent(bot.steamId)}&appid=${CS2_APP_ID}`;
-      const aj = await this._fetchSteamApi(achUrl);
-      const ps = aj && aj.playerstats;
-      if (ps && ps.success && Array.isArray(ps.achievements)) {
-        stats.achievements_total = ps.achievements.length;
-        stats.achievements_unlocked = ps.achievements.filter((a) => Number(a.achieved) === 1).length;
-      }
-    } catch (e) {
-      this._note(`${bot.name}: GetPlayerAchievements failed (${e.message})`);
-    }
-    this._saveStats(bot.name, stats);
   }
 
-  _saveStats(name, stats) {
+  _saveAccountAge(name, created) {
     try {
-      const existing = this.db.one('SELECT * FROM bot_stats WHERE bot = ?', [name]);
-      const merged = { ...stats };
+      const existing = this.db.one('SELECT fetched_at FROM bot_stats WHERE bot = ?', [name]);
       if (existing) {
-        // Keep previously-stored values for any field this run could not retrieve.
-        for (const k of Object.keys(stats)) {
-          if (merged[k] === null || merged[k] === undefined) merged[k] = existing[k];
-        }
-        this.db.run(
-          'UPDATE bot_stats SET achievements_unlocked = ?, achievements_total = ?, account_created = ?, last_logoff = ?, persona_state = ?, visibility = ?, fetched_at = ? WHERE bot = ?',
-          [merged.achievements_unlocked, merged.achievements_total, merged.account_created, merged.last_logoff, merged.persona_state, merged.visibility, Date.now(), name]
-        );
+        this.db.run('UPDATE bot_stats SET account_created = ?, fetched_at = ? WHERE bot = ?', [created, Date.now(), name]);
       } else {
-        this.db.run(
-          'INSERT INTO bot_stats (bot, achievements_unlocked, achievements_total, account_created, last_logoff, persona_state, visibility, fetched_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-          [name, stats.achievements_unlocked, stats.achievements_total, stats.account_created, stats.last_logoff, stats.persona_state, stats.visibility, Date.now()]
-        );
+        this.db.run('INSERT INTO bot_stats (bot, account_created, fetched_at) VALUES (?, ?, ?)', [name, created, Date.now()]);
       }
       this.db.scheduleSave && this.db.scheduleSave();
-    } catch (e) {
-      this._note(`${name}: failed to save account stats (${e.message})`);
+    } catch {
+      /* non-critical */
     }
   }
 

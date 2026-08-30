@@ -18,7 +18,7 @@ export default function BanChecker() {
   const { toast } = useApp();
   const [state, setState] = useState(null);
   const [bots, setBots] = useState({});
-  const [form, setForm] = useState({ autoCheck: false, useProxy: false, delaySeconds: 1, collectStats: true });
+  const [form, setForm] = useState({ autoCheck: false, useProxy: false, delaySeconds: 1 });
   const [busy, setBusy] = useState(false);
 
   const load = () => {
@@ -28,8 +28,7 @@ export default function BanChecker() {
       setForm({
         autoCheck: !!s.config.autoCheck,
         useProxy: !!s.config.useProxy,
-        delaySeconds: s.config.delaySeconds,
-        collectStats: s.config.collectStats !== false
+        delaySeconds: s.config.delaySeconds
       });
     }).catch(() => {});
     asf.getBots().then((b) => setBots(b || {})).catch(() => {});
@@ -118,7 +117,7 @@ export default function BanChecker() {
           one of the API keys from Global Config. If any ban is detected a Discord notification is sent (if configured).
         </p>
 
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <Tip tip="When active, the checker runs in the background, checking one bot at a time until you press Stop" block>
             <div className="flex items-center justify-between rounded-lg bg-night-800/70 px-3 py-2.5">
               <span className="text-xs font-semibold text-slate-300">AutoCheck</span>
@@ -129,15 +128,6 @@ export default function BanChecker() {
             <div className="flex items-center justify-between rounded-lg bg-night-800/70 px-3 py-2.5">
               <span className="text-xs font-semibold text-slate-300">Proxy</span>
               <Toggle checked={!!form.useProxy} disabled={!hasProxies} onChange={(v) => save({ useProxy: v })} />
-            </div>
-          </Tip>
-          <Tip
-            tip="While checking each account, also fetch its stats via the Steam Web API (CS2 achievements, account age, last logoff, profile state) and save them to the database. Disable to check bans only."
-            block
-          >
-            <div className="flex items-center justify-between rounded-lg bg-night-800/70 px-3 py-2.5">
-              <span className="text-xs font-semibold text-slate-300">Get account stats</span>
-              <Toggle checked={form.collectStats !== false} onChange={(v) => save({ collectStats: v })} />
             </div>
           </Tip>
           <Tip tip="Delay between each account check, in seconds (minimum 1)" block>
