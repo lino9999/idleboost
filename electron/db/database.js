@@ -65,6 +65,16 @@ const SCHEMA = [
     action TEXT,
     done_at INTEGER,
     PRIMARY KEY(bot, action)
+  )`,
+  `CREATE TABLE IF NOT EXISTS bot_stats (
+    bot TEXT PRIMARY KEY,
+    achievements_unlocked INTEGER,
+    achievements_total INTEGER,
+    account_created INTEGER,
+    last_logoff INTEGER,
+    persona_state INTEGER,
+    visibility INTEGER,
+    fetched_at INTEGER
   )`
 ];
 
