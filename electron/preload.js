@@ -81,7 +81,6 @@ contextBridge.exposeInMainWorld('asf', {
 
   dbOverview: () => invoke('db:overview'),
   dbBot: (name) => invoke('db:bot', name),
-  dbBotStats: () => invoke('db:botStats'),
   dbGames: (name) => invoke('db:games', name),
   dbSync: () => invoke('db:sync'),
   dbSyncState: () => invoke('db:syncState'),

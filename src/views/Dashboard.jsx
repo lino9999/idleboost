@@ -38,7 +38,6 @@ export default function Dashboard() {
   const [avatarsByBot, setAvatarsByBot] = useState({});
   const [totalHours, setTotalHours] = useState(0);
   const [dbWallet, setDbWallet] = useState({});
-  const [dbStats, setDbStats] = useState({});
   const [isStorageByName, setIsStorageByName] = useState({});
   const [rotInfo, setRotInfo] = useState({ activeCount: 0, maxActiveBots: 50 });
 
@@ -95,15 +94,6 @@ export default function Dashboard() {
         setAvatarsByBot(avatars);
         setDbWallet(walletMap);
         setIsStorageByName(storageMap);
-      })
-      .catch(() => {});
-    asf
-      .dbBotStats()
-      .then((rows) => {
-        if (!alive) return;
-        const map = {};
-        for (const r of rows || []) map[r.bot] = r;
-        setDbStats(map);
       })
       .catch(() => {});
     asf
@@ -282,7 +272,7 @@ export default function Dashboard() {
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
           {visible.map(({ name, bot, status }) => (
-            <BotCard key={name} name={name} bot={bot} status={status} standby={standby} ownedGames={gamesByBot[name]} dbAvatar={avatarsByBot[name]} dbWallet={dbWallet[name]} dbStats={dbStats[name]} isStorage={!!isStorageByName[name]} activeFull={activeFull} onChanged={load} toast={toast} />
+            <BotCard key={name} name={name} bot={bot} status={status} standby={standby} ownedGames={gamesByBot[name]} dbAvatar={avatarsByBot[name]} dbWallet={dbWallet[name]} isStorage={!!isStorageByName[name]} activeFull={activeFull} onChanged={load} toast={toast} />
           ))}
         </div>
       )}

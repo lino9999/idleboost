@@ -30,8 +30,6 @@ function register(ctx) {
     db.query('SELECT * FROM games WHERE bot = ? ORDER BY name ASC', [name])
   );
 
-  ipcMain.handle('db:botStats', () => db.query('SELECT * FROM bot_stats'));
-
   ipcMain.handle('db:sync', () => dataSync.sync(true));
   ipcMain.handle('db:syncState', () => dataSync.getState());
   ipcMain.handle('db:redeems', () => db.query('SELECT * FROM redeem_log ORDER BY ts DESC LIMIT 100'));
@@ -56,7 +54,7 @@ function register(ctx) {
   });
 
   ipcMain.handle('db:reset', () => {
-    const tables = ['bots', 'wallet_snapshots', 'games', 'redeem_log', 'update_log', 'profile_state', 'bot_stats', 'kv'];
+    const tables = ['bots', 'wallet_snapshots', 'games', 'redeem_log', 'update_log', 'profile_state', 'kv'];
     for (const t of tables) {
       try {
         db.run(`DELETE FROM ${t}`);

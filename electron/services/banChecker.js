@@ -346,42 +346,12 @@ class BanChecker extends EventEmitter {
         };
         this._note(`${bot.name}: clear`);
       }
-      await this._collectAccountAge(bot, key);
     } catch (e) {
       this.status[bot.name] = { state: 'error', detail: e.message, at: Date.now() };
       this._note(`${bot.name}: ban check failed (${e.message})`);
     }
     this._persist();
     this.publish();
-  }
-
-  // Fetches just the account creation date (GetPlayerSummaries) so the dashboard
-  // can show the account age. Runs through the API key (and the optional proxy).
-  async _collectAccountAge(bot, key) {
-    if (!this.db) return;
-    try {
-      const summaryUrl = `https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/?key=${encodeURIComponent(key)}&steamids=${encodeURIComponent(bot.steamId)}`;
-      const sj = await this._fetchSteamApi(summaryUrl);
-      const p = sj && sj.response && Array.isArray(sj.response.players) ? sj.response.players[0] : null;
-      const created = p ? Number(p.timecreated) || null : null;
-      if (created) this._saveAccountAge(bot.name, created);
-    } catch {
-      /* non-critical - the ban result is already recorded */
-    }
-  }
-
-  _saveAccountAge(name, created) {
-    try {
-      const existing = this.db.one('SELECT fetched_at FROM bot_stats WHERE bot = ?', [name]);
-      if (existing) {
-        this.db.run('UPDATE bot_stats SET account_created = ?, fetched_at = ? WHERE bot = ?', [created, Date.now(), name]);
-      } else {
-        this.db.run('INSERT INTO bot_stats (bot, account_created, fetched_at) VALUES (?, ?, ?)', [name, created, Date.now()]);
-      }
-      this.db.scheduleSave && this.db.scheduleSave();
-    } catch {
-      /* non-critical */
-    }
   }
 
   _persist() {

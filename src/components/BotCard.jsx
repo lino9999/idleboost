@@ -1,20 +1,11 @@
 import { useState } from 'react';
-import { CalendarDays, ExternalLink, Power, Trash2 } from 'lucide-react';
+import { ExternalLink, Power, Trash2 } from 'lucide-react';
 import Tip from './Tip';
 import { asf } from '../lib/api';
 import { avatarUrl, runningOf, STATUS_META, steamIdOf, walletOf } from '../lib/bots';
 import { formatWallet, currencyCode } from '../lib/format';
 
-function accountAgeText(ts) {
-  const created = Number(ts);
-  if (!created) return null;
-  const years = (Date.now() / 1000 - created) / (365.25 * 24 * 3600);
-  if (years >= 1) return `${years.toFixed(1)} yrs`;
-  const months = Math.max(1, Math.round(years * 12));
-  return `${months} mo`;
-}
-
-export default function BotCard({ name, bot, status, standby, ownedGames, dbAvatar, dbWallet, dbStats, isStorage, activeFull, onChanged, toast }) {
+export default function BotCard({ name, bot, status, standby, ownedGames, dbAvatar, dbWallet, isStorage, activeFull, onChanged, toast }) {
   const [busy, setBusy] = useState(false);
   const meta = STATUS_META[status];
   const liveWallet = walletOf(bot);
@@ -117,20 +108,6 @@ export default function BotCard({ name, bot, status, standby, ownedGames, dbAvat
           </div>
         </Tip>
       </div>
-
-      {dbStats && Number(dbStats.account_created) > 0 && (
-        <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
-          <Tip tip="Account age (from the Steam profile creation date)" block>
-            <div className="flex items-center gap-1.5 rounded-lg bg-night-800/70 px-2.5 py-2">
-              <CalendarDays size={13} className="shrink-0 text-steam" />
-              <div className="min-w-0">
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Age</div>
-                <div className="font-bold text-slate-200">{accountAgeText(dbStats.account_created)}</div>
-              </div>
-            </div>
-          </Tip>
-        </div>
-      )}
 
       <Tip tip={currentGame ? 'Game currently being played (first in queue)' : 'No game is being played right now'} block>
         <div className="mt-2 truncate rounded-lg bg-night-800/70 px-2.5 py-2 text-xs">

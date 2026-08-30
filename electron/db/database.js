@@ -65,11 +65,6 @@ const SCHEMA = [
     action TEXT,
     done_at INTEGER,
     PRIMARY KEY(bot, action)
-  )`,
-  `CREATE TABLE IF NOT EXISTS bot_stats (
-    bot TEXT PRIMARY KEY,
-    account_created INTEGER,
-    fetched_at INTEGER
   )`
 ];
 
@@ -106,8 +101,8 @@ class LocalDatabase {
     this._ensureColumn('bots', 'avatar_url', 'TEXT');
     this._ensureColumn('bots', 'trade_link', 'TEXT');
     this._ensureColumn('bots', 'cards_left', 'INTEGER DEFAULT 0');
-    // Legacy tables from the removed inventory / Steam Market features.
-    for (const legacy of ['inventory_apps', 'inventory_items', 'market_log']) {
+    // Legacy tables from removed features (inventory / Steam Market / account stats).
+    for (const legacy of ['inventory_apps', 'inventory_items', 'market_log', 'bot_stats']) {
       try {
         this.db.run(`DROP TABLE IF EXISTS ${legacy}`);
       } catch {
