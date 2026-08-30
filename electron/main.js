@@ -1,4 +1,5 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const { JsonStore } = require('./core/store');
@@ -16,6 +17,7 @@ const { LibrarySync } = require('./services/librarySync');
 const { FreeGames } = require('./services/freeGames');
 const { BanChecker } = require('./services/banChecker');
 const { CardWatcher } = require('./services/cardWatcher');
+const { AppUpdater } = require('./services/appUpdater');
 const { LocalDatabase } = require('./db/database');
 const { Notifier } = require('./services/notifier');
 const { SteamWeb } = require('./asf/steamWeb');
@@ -41,6 +43,14 @@ const LEGACY_FOLDERS = ['Steam WarnUP'];
 const IS_DEV = !!process.env.VITE_DEV_SERVER_URL;
 const DEFAULT_SETTINGS = { ipcUrl: 'http://127.0.0.1:1242', ipcPassword: '' };
 const MAX_LOG_LINES = 2500;
+
+// "1.10.0" -> "1.10" for a cleaner user-facing version string.
+function formatAppVersion(v) {
+  return String(v || '').replace(/\.0$/g, '') || String(v || '');
+}
+function fullWindowTitle() {
+  return `${DISPLAY_NAME} - Version: ${formatAppVersion(app.getVersion())}`;
+}
 
 function initUserData() {
   const appData = app.getPath('appData');
@@ -86,6 +96,7 @@ let banChecker = null;
 let cardWatcher = null;
 let notifier = null;
 let db = null;
+let appUpdater = null;
 let asfDir = '';
 let logHistory = [];
 let lastStatus = null;
@@ -129,6 +140,7 @@ app.on('before-quit', () => {
   if (freeGames) freeGames.stop();
   if (banChecker) banChecker.stop();
   if (cardWatcher) cardWatcher.stop();
+  if (appUpdater) appUpdater.stop();
   if (db) db.close();
   if (manager) manager.prepareForQuit();
 });
@@ -144,7 +156,7 @@ function createWindow() {
     minWidth: 1100,
     minHeight: 700,
     backgroundColor: '#070a13',
-    title: DISPLAY_NAME,
+    title: fullWindowTitle(),
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -152,6 +164,11 @@ function createWindow() {
       nodeIntegration: false,
       sandbox: false
     }
+  });
+
+  // The renderer sets document.title; reassert the versioned title once loaded.
+  win.webContents.once('dom-ready', () => {
+    if (win && !win.isDestroyed()) win.setTitle(fullWindowTitle());
   });
 
   if (IS_DEV) {
@@ -173,6 +190,36 @@ function send(channel, data) {
 function pushLog(line, stream) {
   logHistory.push({ line, stream });
   if (logHistory.length > MAX_LOG_LINES) logHistory.splice(0, logHistory.length - MAX_LOG_LINES);
+}
+
+// Applies a downloaded portable build: copies it next to the running portable
+// exe (when detectable), launches it and exits. A tiny batch script delays the
+// launch so this instance has released the single-instance lock first.
+function installAppUpdate({ filePath, assetName, version }) {
+  try {
+    const dir = process.env.PORTABLE_EXECUTABLE_DIR || (app.isPackaged ? path.dirname(process.execPath) : null);
+    if (dir && fs.existsSync(dir)) {
+      const dest = path.join(dir, assetName);
+      if (path.resolve(dest) !== path.resolve(filePath)) fs.copyFileSync(filePath, dest);
+      const bat = path.join(app.getPath('temp'), `idleboost-update-${Date.now()}.bat`);
+      const script = [
+        '@echo off',
+        'ping -n 4 127.0.0.1 >nul',
+        `start "" "${dest}"`,
+        `del "${filePath}" 2>nul`,
+        'del "%~f0"'
+      ].join('\r\n');
+      fs.writeFileSync(bat, script);
+      spawn('cmd.exe', ['/c', bat], { detached: true, windowsHide: true, stdio: 'ignore' }).unref();
+      pushLog(`[Steam Warming UP] IdleBoost v${version} downloaded - restarting into the new version...`, 'system');
+      send('asf:log', { line: `[Steam Warming UP] IdleBoost v${version} downloaded - restarting into the new version...`, stream: 'system' });
+      setTimeout(() => app.exit(0), 1200);
+      return;
+    }
+  } catch (e) {
+    pushLog(`[Steam Warming UP] Auto-install failed (${e.message}) - showing the downloaded file instead`, 'stderr');
+  }
+  shell.showItemInFolder(filePath);
 }
 
 async function boot() {
@@ -344,6 +391,13 @@ async function boot() {
     notifier,
     log: (line) => pushLog(line, 'cards')
   });
+  appUpdater = new AppUpdater({
+    getVersion: () => app.getVersion(),
+    downloadDir: path.join(app.getPath('userData'), 'updates'),
+    log: (line) => pushLog(line, 'updater')
+  });
+  appUpdater.on('state', (s) => send('appupdate:state', s));
+  appUpdater.on('downloaded', (info) => installAppUpdate(info));
 
   manager.on('log', ({ line, stream }) => {
     pushLog(line, stream);
@@ -419,6 +473,10 @@ async function boot() {
   banHandlers.register(ctx);
   notifierHandlers.register(ctx);
 
+  ipcMain.handle('appupdate:get', () => appUpdater.getState());
+  ipcMain.handle('appupdate:check', () => appUpdater.checkNow());
+  ipcMain.handle('appupdate:install', () => appUpdater.install());
+
   manager.start();
   rotation.start();
   scheduler.start();
@@ -430,6 +488,7 @@ async function boot() {
   librarySync.start();
   banChecker.start();
   cardWatcher.start();
+  appUpdater.start();
   statusPoll();
   setInterval(statusPoll, 5000);
   setInterval(connectivityPoll, 20000);

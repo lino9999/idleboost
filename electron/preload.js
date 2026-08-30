@@ -118,8 +118,13 @@ contextBridge.exposeInMainWorld('asf', {
   onBan: (cb) => on('ban:state', cb),
 
   webhookGet: () => invoke('webhook:get'),
-  webhookSet: (cfg) => invoke('webhook:set', cfg),
+  webhookSet: (cfg) => invoke('webhook:set'),
   onWebhook: (cb) => on('webhook:state', cb),
+
+  appUpdateGet: () => invoke('appupdate:get'),
+  appUpdateCheck: () => invoke('appupdate:check'),
+  appUpdateInstall: () => invoke('appupdate:install'),
+  onAppUpdate: (cb) => on('appupdate:state', cb),
 
   openExternal: (url) => invoke('shell:openExternal', url)
 });

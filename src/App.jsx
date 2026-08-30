@@ -3,6 +3,7 @@ import { AlertTriangle, CheckCircle2, Info, RefreshCw, XCircle } from 'lucide-re
 import Sidebar from './components/Sidebar';
 import TopBar from './components/TopBar';
 import BootScreen from './components/BootScreen';
+import AppUpdatePopup from './components/AppUpdatePopup';
 import Dashboard from './views/Dashboard';
 import Storage from './views/Storage';
 import SteamProfile from './views/SteamProfile';
@@ -168,6 +169,7 @@ export default function App() {
           </main>
         </div>
         <Toasts items={toasts} />
+        <AppUpdatePopup />
       </div>
     </AppCtx.Provider>
   );

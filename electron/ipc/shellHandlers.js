@@ -1,6 +1,6 @@
 const { ipcMain, shell } = require('electron');
 
-const ALLOWED = /^https:\/\/(steamcommunity\.com|store\.steampowered\.com|telegram\.me|t\.me|suborbit\.al)\//i;
+const ALLOWED = /^https:\/\/(steamcommunity\.com|store\.steampowered\.com|telegram\.me|t\.me|suborbit\.al|github\.com)\//i;
 
 function register() {
   ipcMain.handle('shell:openExternal', (_e, url) => {
