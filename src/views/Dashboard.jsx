@@ -138,6 +138,7 @@ export default function Dashboard() {
 
   const wallet = useMemo(() => {
     const sums = {};
+    const counts = {};
     const liveByName = {};
     for (const { name, bot } of list) liveByName[name] = walletOf(bot);
     const names = new Set([...Object.keys(liveByName), ...Object.keys(dbWallet)]);
@@ -155,10 +156,19 @@ export default function Dashboard() {
         w = persisted;
       }
       if (w && Number(w.currency) > 0) {
-        sums[w.currency] = (sums[w.currency] || 0) + Number(w.balance || 0);
+        const cur = w.currency;
+        sums[cur] = (sums[cur] || 0) + Number(w.balance || 0);
+        counts[cur] = (counts[cur] || 0) + 1;
       }
     }
-    return Object.entries(sums).sort((a, b) => b[1] - a[1]);
+    // Majority currency first: the one held by the most accounts, tie broken by total.
+    // This way a single outlier currency never hijacks the dashboard total.
+    return Object.entries(sums).sort((a, b) => {
+      const ca = counts[a[0]] || 0;
+      const cb = counts[b[0]] || 0;
+      if (cb !== ca) return cb - ca;
+      return b[1] - a[1];
+    });
   }, [list, dbWallet]);
 
   const primary = wallet[0];
@@ -181,11 +191,7 @@ export default function Dashboard() {
         <StatCard
           label="Total Wallet Balance"
           value={primaryText}
-          sub={
-            wallet.length > 1
-              ? `${primaryCode} + ${wallet.length - 1} more currenc${wallet.length > 2 ? 'ies' : 'y'}`
-              : primaryCode || 'No wallet data yet'
-          }
+          sub={primaryCode || 'No wallet data yet'}
         />
         <StatCard
           label="Total Bots"
