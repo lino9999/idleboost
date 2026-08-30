@@ -57,15 +57,37 @@ class UpdateManager extends EventEmitter {
     this.busy = false;
     this.restartScheduled = false;
     this.timer = null;
+    this.quitting = false;
   }
 
   start() {
     if (this.timer) return;
     this.timer = setInterval(() => this._maybeCheck().catch(() => {}), TICK_MS);
-    setTimeout(() => this._maybeCheck().catch(() => {}), 20000);
+    // On every program start, force an update check regardless of the hourly
+    // interval, as soon as ASF is reachable.
+    this._startupUpdate().catch(() => {});
+  }
+
+  // Waits for ASF to come online, then forces a check/update pass bypassing the
+  // hourly interval (the autoAsf / autoPlugins toggles are still respected). The
+  // FreePackages plugin stays excluded from plugin updates (see checkNow).
+  async _startupUpdate() {
+    for (let attempt = 0; attempt < 40; attempt++) {
+      if (this.quitting) return;
+      try {
+        await this.api.getAsf();
+        this._note(`Startup: checking for ASF / plugin updates (auto-update ASF ${this.cfg.autoAsf ? 'ON' : 'OFF'}, plugins ${this.cfg.autoPlugins ? 'ON' : 'OFF'})...`);
+        await this.checkNow(false);
+        return;
+      } catch {
+        await new Promise((r) => setTimeout(r, 5000));
+      }
+    }
+    this._note('Startup: ASF never became reachable - update check skipped');
   }
 
   stop() {
+    this.quitting = true;
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
   }

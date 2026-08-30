@@ -1,9 +1,29 @@
+import { useEffect, useState } from 'react';
+import { RefreshCw } from 'lucide-react';
+import { asf } from '../lib/api';
+
 export default function BootScreen({ status }) {
+  const [upd, setUpd] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    asf.updaterGet().then((s) => alive && setUpd(s)).catch(() => {});
+    const off = asf.onUpdater((s) => alive && setUpd(s));
+    return () => {
+      alive = false;
+      off();
+    };
+  }, []);
+
   const running = !!(status && status.running);
   const ipc = !!(status && status.ipcReachable);
+  const updating = !!(upd && (upd.busy || upd.restartScheduled));
+
   let stage = 'Preparing the application…';
   if (!running) stage = 'Starting ArchiSteamFarm…';
   else if (!ipc) stage = 'Waiting for the ASF IPC server to come online…';
+  else if (upd && upd.restartScheduled) stage = 'Applying ASF update - restarting soon…';
+  else if (upd && upd.busy) stage = 'Checking for ASF / plugin updates…';
   else stage = 'Loading your dashboard…';
 
   return (
@@ -16,7 +36,17 @@ export default function BootScreen({ status }) {
           style={{ animation: 'bootbar 1.5s ease-in-out infinite' }}
         />
       </div>
-      <p className="mt-4 text-xs text-slate-500">{stage}</p>
+      <p className="mt-4 flex items-center gap-2 text-xs text-slate-500">
+        {updating && <RefreshCw size={13} className="animate-spin text-steam" />}
+        {stage}
+      </p>
+      {updating && (
+        <p className="mt-2 text-[11px] text-steam">
+          {upd.restartScheduled
+            ? 'An ASF update is being applied - ASF will restart automatically.'
+            : 'Keeping ASF and plugins up to date (FreePackages excluded)…'}
+        </p>
+      )}
     </div>
   );
 }
