@@ -1,7 +1,7 @@
-const { EventEmitter } = require('events');
+﻿const { EventEmitter } = require('events');
 
-const TICK_MS = 30000;
-const DEFAULTS = { autoCheck: false, useProxy: false, delayMinutes: 5, minDelayMinutes: 1 };
+const TICK_MS = 5000;
+const DEFAULTS = { autoCheck: false, useProxy: false, delaySeconds: 1, minDelaySeconds: 1 };
 
 function clampNum(value, lo, hi, fallback) {
   const n = Number(value);
@@ -22,10 +22,15 @@ class BanChecker extends EventEmitter {
     this.db = db || null;
     this.log = log || (() => {});
     const saved = store.get('ban-checker', {}) || {};
+    // Migrate the old minute-based setting to seconds.
+    let delaySeconds = Number(saved.delaySeconds);
+    if (!Number.isFinite(delaySeconds) && Number.isFinite(Number(saved.delayMinutes))) {
+      delaySeconds = Number(saved.delayMinutes) * 60;
+    }
     this.cfg = {
       autoCheck: !!saved.autoCheck,
       useProxy: !!saved.useProxy,
-      delayMinutes: clampNum(saved.delayMinutes, DEFAULTS.minDelayMinutes, 10080, DEFAULTS.delayMinutes)
+      delaySeconds: clampNum(delaySeconds, DEFAULTS.minDelaySeconds, 86400, DEFAULTS.delaySeconds)
     };
     this.status = saved.status || {};
     this.running = false;
@@ -65,7 +70,7 @@ class BanChecker extends EventEmitter {
     const cfg = { ...this.cfg, ...patch };
     cfg.autoCheck = !!cfg.autoCheck;
     cfg.useProxy = !!cfg.useProxy;
-    cfg.delayMinutes = clampNum(cfg.delayMinutes, DEFAULTS.minDelayMinutes, 10080, DEFAULTS.delayMinutes);
+    cfg.delaySeconds = clampNum(cfg.delaySeconds, DEFAULTS.minDelaySeconds, 86400, DEFAULTS.delaySeconds);
     const wasAuto = this.cfg.autoCheck;
     this.cfg = cfg;
     if (wasAuto && !cfg.autoCheck) {
@@ -73,7 +78,7 @@ class BanChecker extends EventEmitter {
       if (this._wake) this._wake();
     }
     this._persist();
-    this._note(`Ban checker ${cfg.autoCheck ? 'ENABLED' : 'DISABLED'} - delay ${cfg.delayMinutes}min, proxy ${cfg.useProxy ? 'on' : 'off'}`);
+    this._note(`Ban checker ${cfg.autoCheck ? 'ENABLED' : 'DISABLED'} - delay ${cfg.delaySeconds}s, proxy ${cfg.useProxy ? 'on' : 'off'}`);
     this.publish();
     return this.getConfig();
   }
@@ -86,7 +91,7 @@ class BanChecker extends EventEmitter {
     this.running = true;
     this.stopRequested = false;
     this.publish();
-    this._note(`Ban check sweep started: ${bots.length} account(s), one every ${this.cfg.delayMinutes} min`);
+    this._note(`Ban check sweep started: ${bots.length} account(s), one every ${this.cfg.delaySeconds}s`);
 
     // Fire-and-forget so the UI is not blocked for the whole (long) sweep.
     this._runSweep(bots).finally(() => {
@@ -110,7 +115,7 @@ class BanChecker extends EventEmitter {
       await this._checkBot(bots[i]);
       const isLast = i === bots.length - 1;
       if (!isLast && !this.stopRequested) {
-        await this._sleepInterruptible(this.cfg.delayMinutes * 60000);
+        await this._sleepInterruptible(this.cfg.delaySeconds * 1000);
       }
     }
   }
@@ -152,7 +157,7 @@ class BanChecker extends EventEmitter {
       this.publish();
       return;
     }
-    if (Date.now() - this.lastCheckAt < this.cfg.delayMinutes * 60000) {
+    if (Date.now() - this.lastCheckAt < this.cfg.delaySeconds * 1000) {
       this.publish();
       return;
     }
@@ -361,3 +366,4 @@ class BanChecker extends EventEmitter {
 }
 
 module.exports = { BanChecker };
+

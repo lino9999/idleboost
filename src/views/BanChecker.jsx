@@ -5,18 +5,27 @@ import Toggle from '../components/Toggle';
 import { asf } from '../lib/api';
 import { useApp } from '../App';
 
+function checkDate(ts) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  if (Number.isNaN(d.getTime())) return '';
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  return `${dd}/${mm}`;
+}
+
 export default function BanChecker() {
   const { toast } = useApp();
   const [state, setState] = useState(null);
   const [bots, setBots] = useState({});
-  const [form, setForm] = useState({ autoCheck: false, useProxy: false, delayMinutes: 5 });
+  const [form, setForm] = useState({ autoCheck: false, useProxy: false, delaySeconds: 1 });
   const [busy, setBusy] = useState(false);
 
   const load = () => {
     asf.banGet().then((s) => {
       if (!s) return;
       setState(s);
-      setForm({ autoCheck: !!s.config.autoCheck, useProxy: !!s.config.useProxy, delayMinutes: s.config.delayMinutes });
+      setForm({ autoCheck: !!s.config.autoCheck, useProxy: !!s.config.useProxy, delaySeconds: s.config.delaySeconds });
     }).catch(() => {});
     asf.getBots().then((b) => setBots(b || {})).catch(() => {});
   };
@@ -45,7 +54,7 @@ export default function BanChecker() {
     try {
       const res = await asf.banCheckAll();
       if (res && res.started) {
-        toast(`Ban check started - ${res.total} account(s), one every ${form.delayMinutes} min`, 'success');
+        toast(`Ban check started - ${res.total} account(s), one every ${form.delaySeconds}s`, 'success');
       } else if (res && res.skipped) {
         toast('A ban check is already running', 'info');
       } else {
@@ -117,16 +126,16 @@ export default function BanChecker() {
               <Toggle checked={!!form.useProxy} disabled={!hasProxies} onChange={(v) => save({ useProxy: v })} />
             </div>
           </Tip>
-          <Tip tip="Delay between each account check, in minutes (minimum 1)" block>
+          <Tip tip="Delay between each account check, in seconds (minimum 1)" block>
             <div>
-              <label className="label">Delay between checks (min)</label>
+              <label className="label">Delay between checks (sec)</label>
               <input
                 type="number"
                 min="1"
                 className="input"
-                value={form.delayMinutes}
-                onChange={(e) => setForm((f) => ({ ...f, delayMinutes: e.target.value }))}
-                onBlur={() => save({ delayMinutes: Number(form.delayMinutes) || 5 })}
+                value={form.delaySeconds}
+                onChange={(e) => setForm((f) => ({ ...f, delaySeconds: e.target.value }))}
+                onBlur={() => save({ delaySeconds: Number(form.delaySeconds) || 1 })}
               />
             </div>
           </Tip>
@@ -166,11 +175,20 @@ export default function BanChecker() {
                 <div key={n} className="flex items-center justify-between rounded-lg bg-night-800/70 px-3 py-2.5">
                   <span className="truncate font-mono text-xs text-slate-300">{n}</span>
                   {banned ? (
-                    <span className="chip border-rose-500/40 bg-rose-500/15 text-rose-300">BANNED</span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="chip border-rose-500/40 bg-rose-500/15 text-rose-300">BANNED</span>
+                      {s.at && <span className="font-mono text-[10px] text-slate-500">{checkDate(s.at)}</span>}
+                    </span>
                   ) : s && s.state === 'error' ? (
-                    <span className="chip border-amber-400/40 bg-amber-400/10 text-amber-300">ERROR</span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="chip border-amber-400/40 bg-amber-400/10 text-amber-300">ERROR</span>
+                      {s.at && <span className="font-mono text-[10px] text-slate-500">{checkDate(s.at)}</span>}
+                    </span>
                   ) : s && s.state === 'clear' ? (
-                    <span className="chip border-emerald-400/30 bg-emerald-400/10 text-emerald-300">CLEAR</span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="chip border-emerald-400/30 bg-emerald-400/10 text-emerald-300">CLEAR</span>
+                      {s.at && <span className="font-mono text-[10px] text-slate-500">{checkDate(s.at)}</span>}
+                    </span>
                   ) : (
                     <span className="chip border-white/10 bg-night-800 text-slate-500">NOT CHECKED</span>
                   )}
