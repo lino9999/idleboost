@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Archive, Database, Gamepad2, RefreshCw, Search, Trash2 } from 'lucide-react';
+import { Archive, Database, Gamepad2, RefreshCw, Search, Trash2, X } from 'lucide-react';
 import Tip from '../components/Tip';
 import { asf } from '../lib/api';
 import { currencyCode, formatWallet } from '../lib/format';
@@ -42,97 +42,110 @@ function BotDetail({ name, onClose }) {
     load();
   }, [load]);
 
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   const bot = detail && detail.bot;
   const history = (detail && detail.history) || [];
   const q = filter.trim().toLowerCase();
   const filteredGames = games.filter((g) => !q || String(g.name).toLowerCase().includes(q) || String(g.app_id).includes(q));
 
   return (
-    <div className="card p-5">
-      <div className="mb-4 flex items-center gap-3">
-        <h3 className="text-base font-bold text-white">{name}</h3>
-        {bot && bot.is_storage ? <span className="chip border-steam/40 bg-steam/15 text-steam">STORAGE ACCOUNT</span> : null}
-        {bot ? (
-          <span className="chip border-emerald-400/30 bg-emerald-400/10 text-emerald-300">
-            {formatWallet(bot.wallet_balance, bot.wallet_currency) || '0.00'} {currencyCode(bot.wallet_currency)}
-          </span>
-        ) : null}
-        <div className="ml-auto flex items-center gap-2">
-          <Tip tip="Reload this bot's data from the local database">
-            <button className="btn-ghost" onClick={load}>
-              <RefreshCw size={14} />
+    <div className="fixed inset-0 z-50 flex justify-end">
+      <div className="absolute inset-0 animate-fade-in bg-black/60 backdrop-blur-[2px]" onClick={onClose} />
+      <div className="relative z-10 flex h-full w-full max-w-2xl animate-drawer-in flex-col border-l border-white/10 bg-night-850 shadow-2xl">
+        <div className="flex items-center gap-3 border-b border-white/[0.06] px-5 py-4">
+          <h3 className="text-base font-bold text-white">{name}</h3>
+          {bot && bot.is_storage ? <span className="chip border-steam/40 bg-steam/15 text-steam">STORAGE ACCOUNT</span> : null}
+          {bot ? (
+            <span className="chip border-emerald-400/30 bg-emerald-400/10 text-emerald-300">
+              {formatWallet(bot.wallet_balance, bot.wallet_currency) || '0.00'} {currencyCode(bot.wallet_currency)}
+            </span>
+          ) : null}
+          <div className="ml-auto flex items-center gap-2">
+            <Tip tip="Reload this bot's data from the local database">
+              <button className="btn-ghost" onClick={load}>
+                <RefreshCw size={14} />
+              </button>
+            </Tip>
+            <Tip tip="Close (Esc)">
+              <button className="btn-ghost" onClick={onClose}>
+                <X size={15} />
+              </button>
+            </Tip>
+          </div>
+        </div>
+
+        <div className="flex min-h-0 flex-1 flex-col p-5">
+          <div className="mb-4 flex items-center gap-2">
+            <button className={`rounded-full border px-3 py-1 text-xs font-semibold ${tab === 'games' ? 'border-steam/40 bg-steam/15 text-steam' : 'border-white/10 bg-night-800 text-slate-400'}`} onClick={() => setTab('games')}>
+              Games ({games.length})
             </button>
-          </Tip>
-          <button className="btn-ghost" onClick={onClose}>Close</button>
+            <button className={`rounded-full border px-3 py-1 text-xs font-semibold ${tab === 'wallet' ? 'border-steam/40 bg-steam/15 text-steam' : 'border-white/10 bg-night-800 text-slate-400'}`} onClick={() => setTab('wallet')}>
+              Wallet history ({history.length})
+            </button>
+            <div className="relative ml-auto w-56">
+              <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+              <input className="input pl-8 text-xs" placeholder="Filter..." value={filter} onChange={(e) => setFilter(e.target.value)} />
+            </div>
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-white/[0.06]">
+            {tab === 'games' && (
+              <table className="w-full text-left text-xs">
+                <thead className="sticky top-0 bg-night-800 text-[10px] uppercase tracking-wider text-slate-500">
+                  <tr>
+                    <th className="px-3 py-2">Game</th>
+                    <th className="px-3 py-2">App ID</th>
+                    <th className="px-3 py-2">Cards left</th>
+                    <th className="px-3 py-2">Hours played</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredGames.length === 0 && (
+                    <tr><td colSpan={4} className="px-3 py-6 text-center text-slate-500">No games stored yet - games are synced automatically for accounts whose profile is set to public.</td></tr>
+                  )}
+                  {filteredGames.map((g) => (
+                    <tr key={g.app_id} className="border-t border-white/[0.04]">
+                      <td className="px-3 py-1.5 text-slate-300">{g.name || `App ${g.app_id}`}</td>
+                      <td className="px-3 py-1.5 font-mono text-slate-400">{g.app_id}</td>
+                      <td className="px-3 py-1.5 text-slate-400">{g.cards_remaining}</td>
+                      <td className="px-3 py-1.5 text-slate-400">{Number(g.hours_played).toFixed(1)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+
+            {tab === 'wallet' && (
+              <table className="w-full text-left text-xs">
+                <thead className="sticky top-0 bg-night-800 text-[10px] uppercase tracking-wider text-slate-500">
+                  <tr>
+                    <th className="px-3 py-2">Date</th>
+                    <th className="px-3 py-2">Balance</th>
+                    <th className="px-3 py-2">Currency</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {history.length === 0 && (
+                    <tr><td colSpan={3} className="px-3 py-6 text-center text-slate-500">No wallet snapshots yet.</td></tr>
+                  )}
+                  {history.map((h, i) => (
+                    <tr key={i} className="border-t border-white/[0.04]">
+                      <td className="px-3 py-1.5 text-slate-400">{new Date(h.ts).toLocaleString()}</td>
+                      <td className="px-3 py-1.5 font-bold text-emerald-300">{formatWallet(h.balance, h.currency) || h.balance}</td>
+                      <td className="px-3 py-1.5 text-slate-500">{currencyCode(h.currency)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
         </div>
       </div>
-
-      <div className="mb-4 flex items-center gap-2">
-        <button className={`rounded-full border px-3 py-1 text-xs font-semibold ${tab === 'games' ? 'border-steam/40 bg-steam/15 text-steam' : 'border-white/10 bg-night-800 text-slate-400'}`} onClick={() => setTab('games')}>
-          Games ({games.length})
-        </button>
-        <button className={`rounded-full border px-3 py-1 text-xs font-semibold ${tab === 'wallet' ? 'border-steam/40 bg-steam/15 text-steam' : 'border-white/10 bg-night-800 text-slate-400'}`} onClick={() => setTab('wallet')}>
-          Wallet history ({history.length})
-        </button>
-        <div className="relative ml-auto w-56">
-          <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-          <input className="input pl-8 text-xs" placeholder="Filter..." value={filter} onChange={(e) => setFilter(e.target.value)} />
-        </div>
-      </div>
-
-      {tab === 'games' && (
-        <div className="max-h-96 overflow-y-auto rounded-lg border border-white/[0.06]">
-          <table className="w-full text-left text-xs">
-            <thead className="sticky top-0 bg-night-800 text-[10px] uppercase tracking-wider text-slate-500">
-              <tr>
-                <th className="px-3 py-2">Game</th>
-                <th className="px-3 py-2">App ID</th>
-                <th className="px-3 py-2">Cards left</th>
-                <th className="px-3 py-2">Hours played</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredGames.length === 0 && (
-                <tr><td colSpan={4} className="px-3 py-6 text-center text-slate-500">No games stored yet - games are synced automatically for accounts whose profile is set to public.</td></tr>
-              )}
-              {filteredGames.map((g) => (
-                <tr key={g.app_id} className="border-t border-white/[0.04]">
-                  <td className="px-3 py-1.5 text-slate-300">{g.name || `App ${g.app_id}`}</td>
-                  <td className="px-3 py-1.5 font-mono text-slate-400">{g.app_id}</td>
-                  <td className="px-3 py-1.5 text-slate-400">{g.cards_remaining}</td>
-                  <td className="px-3 py-1.5 text-slate-400">{Number(g.hours_played).toFixed(1)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {tab === 'wallet' && (
-        <div className="max-h-96 overflow-y-auto rounded-lg border border-white/[0.06]">
-          <table className="w-full text-left text-xs">
-            <thead className="sticky top-0 bg-night-800 text-[10px] uppercase tracking-wider text-slate-500">
-              <tr>
-                <th className="px-3 py-2">Date</th>
-                <th className="px-3 py-2">Balance</th>
-                <th className="px-3 py-2">Currency</th>
-              </tr>
-            </thead>
-            <tbody>
-              {history.length === 0 && (
-                <tr><td colSpan={3} className="px-3 py-6 text-center text-slate-500">No wallet snapshots yet.</td></tr>
-              )}
-              {history.map((h, i) => (
-                <tr key={i} className="border-t border-white/[0.04]">
-                  <td className="px-3 py-1.5 text-slate-400">{new Date(h.ts).toLocaleString()}</td>
-                  <td className="px-3 py-1.5 font-bold text-emerald-300">{formatWallet(h.balance, h.currency) || h.balance}</td>
-                  <td className="px-3 py-1.5 text-slate-500">{currencyCode(h.currency)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
     </div>
   );
 }

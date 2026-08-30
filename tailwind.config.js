@@ -27,7 +27,19 @@ module.exports = {
         mono: ['"Cascadia Code"', 'Consolas', '"Courier New"', 'monospace']
       },
       animation: {
-        'pulse-slow': 'pulse 2.4s cubic-bezier(0.4, 0, 0.6, 1) infinite'
+        'pulse-slow': 'pulse 2.4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'drawer-in': 'drawer-in 0.22s ease-out',
+        'fade-in': 'fade-in 0.18s ease-out'
+      },
+      keyframes: {
+        'drawer-in': {
+          from: { transform: 'translateX(100%)' },
+          to: { transform: 'translateX(0)' }
+        },
+        'fade-in': {
+          from: { opacity: '0' },
+          to: { opacity: '1' }
+        }
       }
     }
   },
