@@ -58,10 +58,10 @@ class AppUpdater extends EventEmitter {
       const rel = await res.json();
       const releaseUrl = rel.html_url || RELEASES_URL;
       const assets = Array.isArray(rel.assets) ? rel.assets : [];
-      const asset = assets.find((a) => /IdleBoost[-_ ]?\d.*-Portable\.exe$/i.test(String(a.name || '')));
+      const asset = assets.find((a) => /IdleBoost[-_ ]?\d.*\.exe$/i.test(String(a.name || '')));
       let version = null;
       if (asset) {
-        const m = String(asset.name).match(/IdleBoost[-_ ]?(\d+(?:\.\d+)*)\s*-\s*Portable/i);
+        const m = String(asset.name).match(/IdleBoost[-_ ]?(\d+(?:\.\d+)*)\s*(?:-Portable)?\.exe$/i);
         if (m) version = m[1];
       }
       if (!version) {
