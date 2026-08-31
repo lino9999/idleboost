@@ -334,6 +334,62 @@ function resolveBundledAsfDir(app) {
   return candidates[0];
 }
 
+// The portable build extracts itself into a volatile %TEMP% folder, and
+// antivirus software (or disk cleanups) sometimes deletes ArchiSteamFarm.exe
+// from there while leaving the rest of the app intact. To survive that, ASF is
+// copied once into userData/asf-bin and always launched from that persistent
+// location; the copy is refreshed whenever the app version changes.
+// Returns the directory ASF must be launched from, or throws when the ASF
+// executable cannot be found anywhere.
+function ensurePersistentAsfBin(app, bundledAsfDir) {
+  const bundledExe = path.join(bundledAsfDir, 'ArchiSteamFarm.exe');
+  if (!app.isPackaged) {
+    if (!fs.existsSync(bundledExe)) {
+      throw new Error(`ArchiSteamFarm.exe not found at: ${bundledExe}`);
+    }
+    return bundledAsfDir;
+  }
+
+  const binDir = path.join(app.getPath('userData'), 'asf-bin');
+  const binExe = path.join(binDir, 'ArchiSteamFarm.exe');
+  const versionFile = path.join(binDir, '.swup-asf-source-version');
+  const bundledOk = fs.existsSync(bundledExe);
+  const copyOk = fs.existsSync(binExe);
+
+  if (bundledOk) {
+    let prevVersion = '';
+    try {
+      prevVersion = fs.readFileSync(versionFile, 'utf8').trim();
+    } catch {
+      prevVersion = '';
+    }
+    const curVersion = app.getVersion() || 'dev';
+    if (!copyOk || prevVersion !== curVersion) {
+      try {
+        fs.mkdirSync(binDir, { recursive: true });
+        for (const f of ['ArchiSteamFarm.exe', 'aspnetcorev2_inprocess.dll']) {
+          const src = path.join(bundledAsfDir, f);
+          if (fs.existsSync(src)) fs.copyFileSync(src, path.join(binDir, f));
+        }
+        fs.writeFileSync(versionFile, curVersion);
+        return binDir;
+      } catch {
+        // Copy failed (disk/permissions) - run from the bundle while it exists.
+        return bundledAsfDir;
+      }
+    }
+    return binDir;
+  }
+
+  if (copyOk) return binDir;
+
+  throw new Error(
+    `ArchiSteamFarm.exe is missing (checked "${bundledExe}" and "${binExe}"). ` +
+      'This is usually caused by the antivirus quarantining the file after the app extracted itself. ' +
+      'Whitelist IdleBoost (and its folders) in your antivirus, then start the program again.'
+  );
+}
+
 function ensureAsfHome(app, bundledAsfDir) {
   if (!app.isPackaged) return bundledAsfDir;
 
@@ -466,6 +522,7 @@ module.exports = {
   clearMatchableTypes,
   FREE_GAMES_DEFAULT_FILTERS,
   resolveBundledAsfDir,
+  ensurePersistentAsfBin,
   ensureAsfHome,
   ensureDefaultAsfConfig,
   ensureIpcEnabled,

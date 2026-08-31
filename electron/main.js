@@ -225,6 +225,14 @@ function installAppUpdate({ filePath, assetName, version }) {
 async function boot() {
   store = new JsonStore(path.join(app.getPath('userData'), 'data'));
   const bundledAsfDir = home.resolveBundledAsfDir(app);
+  let asfBinDir;
+  try {
+    asfBinDir = home.ensurePersistentAsfBin(app, bundledAsfDir);
+  } catch (e) {
+    dialog.showErrorBox('IdleBoost', e.message);
+    app.exit(1);
+    return;
+  }
   asfDir = home.ensureAsfHome(app, bundledAsfDir);
   home.ensureDefaultAsfConfig(asfDir);
   if (home.ensureIpcEnabled(asfDir)) {
@@ -288,7 +296,7 @@ async function boot() {
     log: (line) => pushLog(line, 'profile')
   });
   manager = new AsfManager({
-    exe: path.join(bundledAsfDir, 'ArchiSteamFarm.exe'),
+    exe: path.join(asfBinDir, 'ArchiSteamFarm.exe'),
     homeDir: asfDir
   });
   storage = new StorageManager({
