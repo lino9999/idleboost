@@ -26,6 +26,49 @@ function StatCard({ label, value, sub }) {
   );
 }
 
+function BotCardSkeleton() {
+  return (
+    <div className="card animate-pulse p-4 opacity-80">
+      <div className="flex items-start gap-3">
+        <div className="h-11 w-11 shrink-0 rounded-full bg-night-800" />
+        <div className="min-w-0 flex-1 space-y-2 pt-1">
+          <div className="h-3 w-2/5 rounded bg-night-800" />
+          <div className="h-2.5 w-1/4 rounded bg-night-800/70" />
+        </div>
+        <div className="h-5 w-16 shrink-0 rounded-full bg-night-800/70" />
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <div className="h-12 rounded-lg bg-night-800/60" />
+        <div className="h-12 rounded-lg bg-night-800/60" />
+      </div>
+      <div className="mt-2 h-9 rounded-lg bg-night-800/60" />
+      <div className="mt-3 flex items-center justify-between">
+        <div className="h-8 w-9 rounded-lg bg-night-800" />
+        <div className="h-8 w-9 rounded-lg bg-night-800" />
+      </div>
+    </div>
+  );
+}
+
+function BotsSkeleton({ message }) {
+  return (
+    <div>
+      <div className="mb-3 flex items-center gap-2.5 text-sm text-slate-400">
+        <span className="relative flex h-2.5 w-2.5">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-steam opacity-60" />
+          <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-steam" />
+        </span>
+        {message}
+      </div>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <BotCardSkeleton key={i} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const { standby, toast } = useApp();
   const [bots, setBots] = useState({});
@@ -256,10 +299,8 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {loading ? (
-        <div className="flex h-64 items-center justify-center text-slate-500">
-          <Loader2 size={22} className="mr-2 animate-spin" /> Loading bots from ASF...
-        </div>
+      {Object.keys(bots).length === 0 && (loading || error) ? (
+        <BotsSkeleton message={error ? 'Waiting for ASF - bot configs are being prepared…' : 'Connecting to ASF…'} />
       ) : visible.length === 0 ? (
         <div className="card flex h-64 flex-col items-center justify-center gap-2 text-slate-500">
           <Users size={28} />
