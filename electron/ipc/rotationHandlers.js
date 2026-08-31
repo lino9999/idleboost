@@ -8,6 +8,8 @@ function register(ctx) {
   ipcMain.handle('rotation:prepare', () => rotation.prepareForStart());
   ipcMain.handle('rotation:startManual', (_e, name) => rotation.startManual(String(name)));
   ipcMain.handle('rotation:stopManual', (_e, name) => rotation.stopManual(String(name)));
+  ipcMain.handle('rotation:startFreeGames', () => rotation.startFreeGamesUnlocker());
+  ipcMain.handle('rotation:freeGamesCheck', () => rotation.freeGamesCheck());
 
   ipcMain.handle('plugins:scheduler:get', () => scheduler.getFullState());
   ipcMain.handle('plugins:scheduler:set', (_e, cfg) => scheduler.setConfig(cfg));

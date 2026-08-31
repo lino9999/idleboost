@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Hourglass, Loader2, Play, Power, Square } from 'lucide-react';
+import { Gift, Hourglass, Loader2, Play, Power, Square } from 'lucide-react';
 import Tip from './Tip';
 import { asf } from '../lib/api';
 import { formatMs } from '../lib/format';
@@ -12,6 +12,8 @@ export default function WarmingPanel() {
   const [now, setNow] = useState(Date.now());
   const [starting, setStarting] = useState(false);
   const [checkingBot, setCheckingBot] = useState('');
+  const [fgCheck, setFgCheck] = useState(null);
+  const [fgBusy, setFgBusy] = useState(false);
 
   useEffect(() => {
     const iv = setInterval(() => setNow(Date.now()), 1000);
@@ -31,6 +33,18 @@ export default function WarmingPanel() {
       alive = false;
       off();
       offProg();
+    };
+  }, []);
+
+  // Readiness probe for the FreeGames unlocker (needs one proxy per account).
+  useEffect(() => {
+    let alive = true;
+    const run = () => asf.rotationFreeGamesCheck().then((c) => alive && setFgCheck(c)).catch(() => {});
+    run();
+    const iv = setInterval(run, 15000);
+    return () => {
+      alive = false;
+      clearInterval(iv);
     };
   }, []);
 
@@ -92,10 +106,27 @@ export default function WarmingPanel() {
     }
   };
 
+  const doFreeGames = async () => {
+    if (fgBusy) return;
+    setFgBusy(true);
+    try {
+      const res = await asf.rotationStartFreeGames();
+      toast(`FreeGames unlocker started - ${res.started} bot(s) online, farming disabled`, 'success');
+      const c = await asf.rotationFreeGamesCheck().catch(() => null);
+      if (c) setFgCheck(c);
+    } catch (e) {
+      toast(e.message || 'Failed to start FreeGames unlocker', 'error');
+    } finally {
+      setFgBusy(false);
+    }
+  };
+
   const cfg = (state && state.config) || form;
   const active = (state && state.active) || [];
   const queue = (state && state.queue) || [];
   const stoppingAll = (state && state.stoppingAll) || null;
+  const freeGamesActive = !!(state && state.freeGamesActive) || !!(fgCheck && fgCheck.freeGamesActive);
+  const fgReady = !!(fgCheck && fgCheck.ready);
   const max = Number(form.maxActiveBots) || cfg.maxActiveBots;
 
   return (
@@ -103,8 +134,16 @@ export default function WarmingPanel() {
       <div className="card p-5">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-base font-bold text-white">Warming Engine</h2>
-          <span className={`chip ${cfg.enabled ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300' : 'border-slate-500/30 bg-slate-500/10 text-slate-400'}`}>
-            {cfg.enabled ? 'Running' : 'Stopped'}
+          <span
+            className={`chip ${
+              cfg.enabled
+                ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300'
+                : freeGamesActive
+                  ? 'border-amber-400/30 bg-amber-400/10 text-amber-300'
+                  : 'border-slate-500/30 bg-slate-500/10 text-slate-400'
+            }`}
+          >
+            {cfg.enabled ? 'Running' : freeGamesActive ? 'FreeGames mode' : 'Stopped'}
           </span>
         </div>
         <p className="mb-4 text-xs text-slate-500">
@@ -117,20 +156,52 @@ export default function WarmingPanel() {
             tip={
               cfg.enabled
                 ? 'Already running'
-                : active.length > 0
-                  ? 'Stop the active sessions before starting the warming engine'
-                  : 'Prepare configs and start the warming engine'
+                : freeGamesActive
+                  ? 'Stop the FreeGames unlocker before starting the warming engine'
+                  : active.length > 0
+                    ? 'Stop the active sessions before starting the warming engine'
+                    : 'Prepare configs and start the warming engine'
             }
             block
           >
-            <button className="btn-success w-full" disabled={starting || !!cfg.enabled || standby || active.length > 0 || !!stoppingAll} onClick={doStart}>
+            <button className="btn-success w-full" disabled={starting || !!cfg.enabled || freeGamesActive || standby || active.length > 0 || !!stoppingAll} onClick={doStart}>
               {starting ? <Loader2 size={15} className="animate-spin" /> : <Play size={15} />}
               {starting ? 'Starting…' : 'Start'}
             </button>
           </Tip>
-          <Tip tip={!cfg.enabled && active.length === 0 ? 'Nothing to stop' : 'Stop the engine and disable every bot one by one (1 per second)'} block>
-            <button className="btn-danger w-full" disabled={(!cfg.enabled && active.length === 0) || !!stoppingAll} onClick={doStop}>
+          <Tip tip={!cfg.enabled && active.length === 0 && !freeGamesActive ? 'Nothing to stop' : 'Stop the engine and disable every bot one by one (1 per second)'} block>
+            <button className="btn-danger w-full" disabled={(!cfg.enabled && active.length === 0 && !freeGamesActive) || !!stoppingAll} onClick={doStop}>
               {stoppingAll ? <Loader2 size={15} className="animate-spin" /> : <Square size={15} />} {stoppingAll ? `Stopping ${stoppingAll.stopped}/${stoppingAll.total}…` : 'Stop'}
+            </button>
+          </Tip>
+        </div>
+
+        <div className="mb-3">
+          <Tip
+            tip={
+              freeGamesActive
+                ? 'FreeGames unlocker is running - use Stop to bring the accounts offline'
+                : !fgCheck
+                  ? 'Checking proxy requirements…'
+                  : fgCheck.total === 0
+                    ? 'No bots available'
+                    : !fgReady
+                      ? `Every account needs its own proxy before starting${
+                          fgCheck.missingProxy.length
+                            ? ` (${fgCheck.missingProxy.length} missing: ${fgCheck.missingProxy.slice(0, 5).join(', ')}${fgCheck.missingProxy.length > 5 ? '…' : ''})`
+                            : ''
+                        }`
+                      : 'Bring every account ONLINE without farming (no card farming, no hour idling) so the FreePackages plugin only redeems free games. Requires one proxy per account. Use Stop to go offline again.'
+            }
+            block
+          >
+            <button
+              className="btn-primary w-full"
+              disabled={fgBusy || starting || !!cfg.enabled || freeGamesActive || standby || !!stoppingAll || !fgReady}
+              onClick={doFreeGames}
+            >
+              {fgBusy ? <Loader2 size={15} className="animate-spin" /> : <Gift size={15} />}
+              {freeGamesActive ? 'FreeGames unlocker running' : 'Start FreeGames unlocker'}
             </button>
           </Tip>
         </div>

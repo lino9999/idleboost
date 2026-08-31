@@ -8,6 +8,7 @@ const RETRY_COOLDOWN_MS = 10 * 60000;
 const MAX_IDLE_GAMES = 32;
 const BASE_IDLE_GAME_ID = 730;
 const STOP_STAGGER_MS = 1000;
+const FARMING_PAUSED_BY_DEFAULT = 1;
 const DEFAULTS = { enabled: false, maxActiveBots: 50, minHours: 4, maxHours: 6 };
 
 function sleep(ms) {
@@ -55,6 +56,7 @@ class RotationEngine extends EventEmitter {
     this.standby = false;
     this.startCooldown = {};
     this.stoppingAll = null;
+    this.freeGamesActive = false;
   }
 
   start() {
@@ -97,6 +99,7 @@ class RotationEngine extends EventEmitter {
     if (patch.stopActive === true) {
       this.sessions = {};
       this.manualActive = {};
+      this.freeGamesActive = false;
       this._persist();
       this._note('Stopping ALL bots');
       this._stopAllStaggered().catch(() => {});
@@ -217,6 +220,111 @@ class RotationEngine extends EventEmitter {
     return { ok: true };
   }
 
+  // "FreeGames unlocker" mode: brings every bot ONLINE with farming fully
+  // disabled (no card farming, no hour idling), so the FreePackages plugin just
+  // redeems free games. Requires one proxy per account. Does NOT enable the
+  // rotation engine, so these bots are left running until the Stop button is used.
+  async startFreeGamesUnlocker() {
+    const asfDir = this.getAsfDir ? this.getAsfDir() : null;
+    if (!asfDir) throw new Error('ASF directory not available');
+
+    let bots = {};
+    try {
+      bots = (await this.api.getBots()) || {};
+    } catch {
+      bots = {};
+    }
+    const names = Object.keys(bots)
+      .filter((n) => !this.isStorageBot(n))
+      .sort((a, b) => a.localeCompare(b));
+    if (names.length === 0) throw new Error('No bots to start');
+
+    // Every account needs its own proxy before going online.
+    const missingProxy = this._botsMissingProxy(asfDir, bots, names);
+    if (missingProxy.length > 0) {
+      throw new Error(
+        `${missingProxy.length} bot(s) have no proxy (one per account is required): ${missingProxy.slice(0, 5).join(', ')}${
+          missingProxy.length > 5 ? '…' : ''
+        }`
+      );
+    }
+
+    let written = 0;
+    for (const name of names) {
+      const cfg = home.readBotConfig(asfDir, name);
+      if (!cfg) continue;
+      const before = JSON.stringify(cfg);
+      cfg.EnableFreePackages = true;
+      cfg.PauseFreePackagesWhilePlaying = true;
+      cfg.PauseFreePackagesWhileFarming = true;
+      const limit = Number(cfg.FreePackagesLimit);
+      if (!Number.isFinite(limit) || limit <= 0) cfg.FreePackagesLimit = 25;
+      if (!Array.isArray(cfg.FreePackagesFilters) || cfg.FreePackagesFilters.length === 0) {
+        cfg.FreePackagesFilters = home.FREE_GAMES_DEFAULT_FILTERS;
+      }
+      // No card farming, no hour idling: the bot just stays online.
+      cfg.FarmingPreferences = (Number(cfg.FarmingPreferences) || 0) | FARMING_PAUSED_BY_DEFAULT;
+      cfg.GamesPlayedWhileIdle = [];
+      cfg.Enabled = true;
+      if (JSON.stringify(cfg) !== before) {
+        try {
+          home.writeBotConfig(asfDir, name, cfg);
+          written += 1;
+        } catch {
+          /* skip this bot */
+        }
+      }
+    }
+
+    const res = await this.api.startBots(names);
+    if (res === false) throw new Error('ASF refused to start the bots');
+
+    this.freeGamesActive = true;
+    this._note(`FreeGames unlocker: ${names.length} bot(s) online (no farming) - ${written} config(s) updated`);
+    if (this.notifier) this.notifier.notify('warming', `FreeGames unlocker started (${names.length} accounts online)`);
+    this.publish();
+    return { started: names.length, written };
+  }
+
+  // Names (among `names`) that have no WebProxy either in the live ASF config or
+  // in the on-disk bot config file.
+  _botsMissingProxy(asfDir, bots, names) {
+    const missing = [];
+    for (const name of names) {
+      const liveProxy = bots[name] && bots[name].BotConfig && bots[name].BotConfig.WebProxy;
+      let fileProxy = false;
+      try {
+        const cfg = home.readBotConfig(asfDir, name);
+        fileProxy = !!(cfg && cfg.WebProxy);
+      } catch {
+        fileProxy = false;
+      }
+      if (!liveProxy && !fileProxy) missing.push(name);
+    }
+    return missing;
+  }
+
+  // Lightweight readiness probe for the "Start FreeGames unlocker" button: it
+  // reports whether every (non-storage) account has a proxy. Storage accounts are
+  // excluded because the unlocker never starts them.
+  async freeGamesCheck() {
+    const asfDir = this.getAsfDir ? this.getAsfDir() : null;
+    let bots = {};
+    try {
+      bots = (await this.api.getBots()) || {};
+    } catch {
+      return { ready: false, total: 0, missingProxy: [], freeGamesActive: !!this.freeGamesActive };
+    }
+    const names = Object.keys(bots).filter((n) => !this.isStorageBot(n));
+    const missingProxy = asfDir ? this._botsMissingProxy(asfDir, bots, names) : [];
+    return {
+      ready: names.length > 0 && missingProxy.length === 0,
+      total: names.length,
+      missingProxy,
+      freeGamesActive: !!this.freeGamesActive
+    };
+  }
+
   getFullState() {
     return { config: this.getConfig(), ...this._state() };
   }
@@ -245,6 +353,17 @@ class RotationEngine extends EventEmitter {
       const botCfgProxy = bot.BotConfig && bot.BotConfig.WebProxy ? String(bot.BotConfig.WebProxy) : '';
       const fileProxy = cfg.WebProxy ? String(cfg.WebProxy) : '';
       if (!botCfgProxy && !fileProxy) result.missingProxy.push(name);
+
+      // Warming must farm: clear the "paused by default" bit in case it was set
+      // by the FreeGames unlocker mode.
+      if ((Number(cfg.FarmingPreferences) || 0) & FARMING_PAUSED_BY_DEFAULT) {
+        cfg.FarmingPreferences = (Number(cfg.FarmingPreferences) || 0) & ~FARMING_PAUSED_BY_DEFAULT;
+        try {
+          home.writeBotConfig(asfDir, name, cfg);
+        } catch {
+          /* skip */
+        }
+      }
 
       const current = Array.isArray(cfg.GamesPlayedWhileIdle) ? cfg.GamesPlayedWhileIdle.map(Number).filter((n) => n > 0) : [];
       const owned = await this._ownedGamesFor(name, bot);
@@ -523,6 +642,7 @@ class RotationEngine extends EventEmitter {
       connectedCount: Object.values(bots).filter((b) => b.IsConnectedAndLoggedOn).length,
       maxActiveBots: this.cfg.maxActiveBots,
       stoppingAll: this.stoppingAll ? { ...this.stoppingAll } : null,
+      freeGamesActive: !!this.freeGamesActive,
       recent: this.recent.slice(-30).reverse(),
       lastTick: now
     };

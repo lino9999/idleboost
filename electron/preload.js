@@ -30,6 +30,7 @@ contextBridge.exposeInMainWorld('asf', {
   deleteBots: (names) => invoke('api:deleteBots', names),
 
   configRead: () => invoke('config:read'),
+  configBotCount: () => invoke('config:botCount'),
   configUpdate: (partial) => invoke('config:update', partial),
   configReplace: (full) => invoke('config:replace', full),
 
@@ -41,6 +42,8 @@ contextBridge.exposeInMainWorld('asf', {
   rotationPrepare: () => invoke('rotation:prepare'),
   rotationStartManual: (name) => invoke('rotation:startManual', name),
   rotationStopManual: (name) => invoke('rotation:stopManual', name),
+  rotationStartFreeGames: () => invoke('rotation:startFreeGames'),
+  rotationFreeGamesCheck: () => invoke('rotation:freeGamesCheck'),
   onRotation: (cb) => on('rotation:state', cb),
   onRotationPrepareProgress: (cb) => on('rotation:prepare-progress', cb),
 
