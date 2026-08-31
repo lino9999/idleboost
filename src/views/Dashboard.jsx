@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, RefreshCw, Search, Users } from 'lucide-react';
 import BotCard from '../components/BotCard';
 import WarmingPanel from '../components/WarmingPanel';
@@ -70,7 +70,7 @@ function BotsSkeleton({ message }) {
 }
 
 export default function Dashboard() {
-  const { standby, toast } = useApp();
+  const { standby, toast, status } = useApp();
   const [bots, setBots] = useState({});
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
@@ -83,12 +83,30 @@ export default function Dashboard() {
   const [dbWallet, setDbWallet] = useState({});
   const [isStorageByName, setIsStorageByName] = useState({});
   const [rotInfo, setRotInfo] = useState({ activeCount: 0, maxActiveBots: 50 });
+  const [emptyConfirmed, setEmptyConfirmed] = useState(false);
+  const emptyStreak = useRef(0);
+  const statusRef = useRef(status);
+
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
 
   const load = useCallback(async () => {
     try {
       const data = await asf.getBots();
       setBots(data || {});
       setError('');
+      // ASF answers are trusted only once it is fully online. A "0 bots" reply
+      // received while ASF is still booting (it serves IPC before the bot
+      // objects are initialized) must NOT show the "no bots imported" panel.
+      const st = statusRef.current;
+      const asfReady = !!(st && st.running && st.ipcReachable);
+      if (Object.keys(data || {}).length === 0 && asfReady) {
+        emptyStreak.current += 1;
+      } else {
+        emptyStreak.current = 0;
+      }
+      setEmptyConfirmed(emptyStreak.current >= 2);
     } catch (e) {
       setError(e.message || 'ASF IPC unreachable');
     } finally {
@@ -299,16 +317,19 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {Object.keys(bots).length === 0 && (loading || error) ? (
-        <BotsSkeleton message={error ? 'Waiting for ASF - bot configs are being prepared…' : 'Connecting to ASF…'} />
+      {Object.keys(bots).length === 0 ? (
+        emptyConfirmed ? (
+          <div className="card flex h-64 flex-col items-center justify-center gap-2 text-slate-500">
+            <Users size={28} />
+            <p className="text-sm">No bots imported yet. Use the Importers view to add accounts.</p>
+          </div>
+        ) : (
+          <BotsSkeleton message={error ? 'Waiting for ASF - bot configs are being prepared…' : 'Loading accounts…'} />
+        )
       ) : visible.length === 0 ? (
         <div className="card flex h-64 flex-col items-center justify-center gap-2 text-slate-500">
           <Users size={28} />
-          <p className="text-sm">
-            {counts.all === 0
-              ? 'No bots imported yet. Use the Importers view to add accounts.'
-              : 'No bots match the current search/filter.'}
-          </p>
+          <p className="text-sm">No bots match the current search/filter.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
