@@ -11,7 +11,7 @@ const DEFAULT_FILTERS = [{ NoCostOnly: true }, { Categories: [29] }];
 function FreeGamesRedemptionCard() {
   const { toast } = useApp();
   const [state, setState] = useState(null);
-  const [form, setForm] = useState({ enabled: false, limit: 25 });
+  const [form, setForm] = useState({ enabled: false, limit: 25, skipWarming: false });
   const [busy, setBusy] = useState(false);
   const [saveState, setSaveState] = useState('idle');
   const [proxyCount, setProxyCount] = useState(null);
@@ -24,7 +24,8 @@ function FreeGamesRedemptionCard() {
       setState(s);
       setForm({
         enabled: !!(s && s.allEnabled),
-        limit: s ? s.limit : 25
+        limit: s ? s.limit : 25,
+        skipWarming: !!(s && s.skipWarming)
       });
       loaded.current = true;
     }).catch(() => {});
@@ -54,7 +55,8 @@ function FreeGamesRedemptionCard() {
           limit: f.limit,
           perHour: 0,
           filtersEnabled: true,
-          filters: DEFAULT_FILTERS
+          filters: DEFAULT_FILTERS,
+          skipWarming: !!f.skipWarming
         });
         if (res && Array.isArray(res.failed) && res.failed.length > 0) {
           setSaveState('idle');
@@ -71,7 +73,12 @@ function FreeGamesRedemptionCard() {
           const s = await asf.freePackagesGet();
           setState(s);
           // Reflect the real persisted state so the toggle never drifts on re-mount.
-          setForm((prev) => ({ ...prev, enabled: !!(s && s.allEnabled), limit: s ? s.limit : prev.limit }));
+          setForm((prev) => ({
+            ...prev,
+            enabled: !!(s && s.allEnabled),
+            limit: s ? s.limit : prev.limit,
+            skipWarming: !!(s && s.skipWarming)
+          }));
         } catch {
           /* ignore */
         }
@@ -166,6 +173,25 @@ function FreeGamesRedemptionCard() {
           </div>
         </Tip>
       </div>
+
+      <Tip
+        tip="When ON, accounts with NO card drops left (accounts that only warm hours) are excluded from redemption: redeeming a free game on them would make ASF reset the games being warmed every time (console spam + proxy bandwidth). Accounts that still have card drops keep redeeming normally."
+        block
+      >
+        <div className="mt-4 flex items-center justify-between rounded-lg bg-night-800/70 px-3 py-2.5">
+          <span className="text-xs font-semibold text-slate-300">Skip accounts warming hours (no card drops)</span>
+          <Toggle
+            checked={!!form.skipWarming}
+            disabled={busy}
+            tip={form.skipWarming ? 'Hour-warming accounts are excluded from free games redemption' : 'Free games redemption runs on every account'}
+            onChange={(v) => {
+              const next = { ...form, skipWarming: v };
+              setForm(next);
+              if (loaded.current) doApply(next);
+            }}
+          />
+        </div>
+      </Tip>
     </div>
   );
 }

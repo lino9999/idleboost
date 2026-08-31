@@ -61,7 +61,7 @@ async function syncFreePackagesToAsf(api, asfDir) {
 }
 
 function register(ctx) {
-  const { getAsfDir, store, api, log } = ctx;
+  const { getAsfDir, store, api, db, log } = ctx;
 
   ipcMain.handle('plugins:freepackages:get', () => {
     const s = home.readFreePackagesState(getAsfDir());
@@ -69,20 +69,62 @@ function register(ctx) {
     // (e.g. ASF is rewriting every file right now). Otherwise the toggle must
     // reflect what is really on disk, so a silent write failure is never masked.
     const intent = store.get('freePackagesEnabled', null);
-    const allEnabled = s.readableCount === 0 && intent !== null ? !!intent : s.allEnabled;
-    return { ...s, allEnabled };
+    const skipWarming = store.get('freePackagesSkipWarming', false);
+    let allEnabled = s.allEnabled;
+    if (s.readableCount === 0 && intent !== null) {
+      allEnabled = !!intent;
+    } else if (intent === true && skipWarming && db) {
+      // "Skip warming" intentionally disables accounts without card drops, so
+      // "all enabled" means: every bot that SHOULD have it, has it.
+      try {
+        const rows = db.query('SELECT name, cards_left FROM bots');
+        const expected = {};
+        for (const r of rows || []) expected[r.name] = Number(r.cards_left) > 0;
+        allEnabled = Object.entries(s.perBot || {}).every(([name, st]) => st.enabled === (expected[name] !== false));
+      } catch {
+        allEnabled = true;
+      }
+    }
+    return { ...s, allEnabled, skipWarming };
   });
 
   ipcMain.handle('plugins:freepackages:apply', async (_e, patch) => {
-    const p = patch || {};
+    const p = { ...(patch || {}) };
     const asfDir = getAsfDir();
+
+    if (typeof p.skipWarming === 'boolean') {
+      store.set('freePackagesSkipWarming', p.skipWarming);
+    }
+    const skipWarming = p.skipWarming === true || (p.skipWarming === undefined && store.get('freePackagesSkipWarming', false));
+
+    // When requested, exclude accounts with no card drops left: redeeming a free
+    // game makes ASF reset the idle games being warmed on those accounts, which
+    // spams the console and burns proxy bandwidth for no benefit.
+    let excludedWarmers = 0;
+    if (p.enabled === true && skipWarming && db) {
+      const perBot = {};
+      try {
+        const rows = db.query('SELECT name, cards_left FROM bots');
+        for (const r of rows || []) {
+          const hasCards = Number(r.cards_left) > 0;
+          perBot[r.name] = hasCards;
+          if (!hasCards) excludedWarmers += 1;
+        }
+      } catch {
+        /* db not available - apply to everyone */
+      }
+      p.perBot = perBot;
+    }
+
     const results = home.applyFreePackages(asfDir, p);
     const okResults = results.filter((r) => r.ok);
     const written = okResults.filter((r) => r.written).length;
     const failed = results.filter((r) => !r.ok);
 
     log(
-      `[FreePackages] ${p.enabled ? 'Enabled' : 'Disabled'} free games redemption - ${written} config file(s) updated, ${okResults.length - written} already up to date`
+      `[FreePackages] ${p.enabled ? 'Enabled' : 'Disabled'} free games redemption - ${written} config file(s) updated, ${okResults.length - written} already up to date${
+        p.enabled && skipWarming ? ` (${excludedWarmers} hour-warming account(s) without card drops excluded)` : ''
+      }`
     );
     for (const f of failed) {
       log(`[FreePackages] Could not update ${f.bot}: ${f.error}`, 'stderr');

@@ -81,6 +81,9 @@ function readFreePackagesState(asfDir) {
 function applyFreePackages(asfDir, patch) {
   const bots = listBotNames(asfDir);
   const results = [];
+  // Optional per-bot override: name -> bool. Used to exclude specific bots
+  // (e.g. accounts that are only warming hours and have no card drops).
+  const perBot = patch.perBot || null;
   for (const name of bots) {
     const cfg = readBotConfig(asfDir, name);
     if (!cfg) {
@@ -88,7 +91,8 @@ function applyFreePackages(asfDir, patch) {
       continue;
     }
     const before = JSON.stringify(cfg);
-    if (patch.enabled === true) {
+    const wantEnabled = patch.enabled === true && (!perBot || perBot[name] !== false);
+    if (wantEnabled) {
       cfg.EnableFreePackages = true;
       cfg.PauseFreePackagesWhilePlaying = patch.pauseWhilePlaying !== false;
       cfg.PauseFreePackagesWhileFarming = patch.pauseWhileFarming !== false;
