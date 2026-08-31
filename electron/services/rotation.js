@@ -9,7 +9,7 @@ const MAX_IDLE_GAMES = 32;
 const BASE_IDLE_GAME_ID = 730;
 const STOP_STAGGER_MS = 1000;
 const FARMING_PAUSED_BY_DEFAULT = 1;
-const DEFAULTS = { enabled: false, maxActiveBots: 50, minHours: 4, maxHours: 6 };
+const DEFAULTS = { enabled: false, mode: 'warming', maxActiveBots: 50, minHours: 4, maxHours: 6 };
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -56,7 +56,6 @@ class RotationEngine extends EventEmitter {
     this.standby = false;
     this.startCooldown = {};
     this.stoppingAll = null;
-    this.freeGamesActive = false;
   }
 
   start() {
@@ -93,20 +92,20 @@ class RotationEngine extends EventEmitter {
     cfg.minHours = clampNum(cfg.minHours, 0.1, 240, DEFAULTS.minHours);
     cfg.maxHours = clampNum(cfg.maxHours, cfg.minHours, 240, Math.max(cfg.minHours, DEFAULTS.maxHours));
     cfg.enabled = !!cfg.enabled;
+    cfg.mode = cfg.mode === 'freegames' ? 'freegames' : 'warming';
     this.cfg = cfg;
     this.store.set('rotation', cfg);
 
     if (patch.stopActive === true) {
       this.sessions = {};
       this.manualActive = {};
-      this.freeGamesActive = false;
       this._persist();
       this._note('Stopping ALL bots');
       this._stopAllStaggered().catch(() => {});
     }
 
     this._note(
-      `Settings saved - ${cfg.enabled ? 'ENABLED' : 'DISABLED'}, max ${cfg.maxActiveBots} active bots, uptime ${cfg.minHours}-${cfg.maxHours}h`
+      `Settings saved - ${cfg.enabled ? 'ENABLED' : 'DISABLED'}${cfg.enabled && cfg.mode === 'freegames' ? ' (FreeGames mode)' : ''}, max ${cfg.maxActiveBots} active bots, uptime ${cfg.minHours}-${cfg.maxHours}h`
     );
     this.publish();
     return this.getConfig();
@@ -220,11 +219,12 @@ class RotationEngine extends EventEmitter {
     return { ok: true };
   }
 
-  // "FreeGames unlocker" mode: brings every bot ONLINE with farming fully
-  // disabled (no card farming, no hour idling), so the FreePackages plugin just
-  // redeems free games. Requires one proxy per account. Does NOT enable the
-  // rotation engine, so these bots are left running until the Stop button is used.
-  async startFreeGamesUnlocker() {
+  // "FreeGames unlocker" mode: enables the warming engine in a no-farming mode.
+  // Bots are brought ONLINE with farming fully disabled (no card farming, no hour
+  // idling), so the FreePackages plugin only redeems free games. The engine still
+  // applies "Max Active Bots Limit", "Min Uptime" and "Max Uptime", rotating the
+  // accounts exactly like normal warming. Requires one proxy per account.
+  async startFreeGames() {
     const asfDir = this.getAsfDir ? this.getAsfDir() : null;
     if (!asfDir) throw new Error('ASF directory not available');
 
@@ -249,6 +249,9 @@ class RotationEngine extends EventEmitter {
       );
     }
 
+    // Configure every bot for FreeGames (redeem only, no farming). Enabled stays
+    // false in the config: the engine starts/stops bots at runtime, honoring the
+    // Max Active Bots / uptime settings.
     let written = 0;
     for (const name of names) {
       const cfg = home.readBotConfig(asfDir, name);
@@ -262,10 +265,11 @@ class RotationEngine extends EventEmitter {
       if (!Array.isArray(cfg.FreePackagesFilters) || cfg.FreePackagesFilters.length === 0) {
         cfg.FreePackagesFilters = home.FREE_GAMES_DEFAULT_FILTERS;
       }
-      // No card farming, no hour idling: the bot just stays online.
       cfg.FarmingPreferences = (Number(cfg.FarmingPreferences) || 0) | FARMING_PAUSED_BY_DEFAULT;
       cfg.GamesPlayedWhileIdle = [];
-      cfg.Enabled = true;
+      // Keep Enabled false in the config: the engine starts/stops bots at runtime
+      // (honoring Max Active Bots), so ASF must not auto-start every bot.
+      cfg.Enabled = false;
       if (JSON.stringify(cfg) !== before) {
         try {
           home.writeBotConfig(asfDir, name, cfg);
@@ -276,15 +280,19 @@ class RotationEngine extends EventEmitter {
       }
     }
 
-    const res = await this.api.startBots(names);
-    if (res === false) throw new Error('ASF refused to start the bots');
-
-    this.freeGamesActive = true;
-    this._note(`FreeGames unlocker: ${names.length} bot(s) online (no farming) - ${written} config(s) updated`);
-    if (this.notifier) this.notifier.notify('warming', `FreeGames unlocker started (${names.length} accounts online)`);
+    // Enable the engine in FreeGames mode; the tick() loop applies Max Active Bots
+    // and Min/Max Uptime exactly like normal warming.
+    this.setConfig({ enabled: true, mode: 'freegames' });
+    this._note(
+      `FreeGames unlocker: engine enabled (max ${this.cfg.maxActiveBots} active, uptime ${this.cfg.minHours}-${this.cfg.maxHours}h) - ${written} config(s) set to redeem-only`
+    );
+    if (this.notifier) this.notifier.notify('warming', 'FreeGames unlocker started');
     this.publish();
-    return { started: names.length, written };
+    // Kick a tick immediately instead of waiting for the next interval.
+    this.tick().catch(() => {});
+    return { ok: true, written };
   }
+
 
   // Names (among `names`) that have no WebProxy either in the live ASF config or
   // in the on-disk bot config file.
@@ -309,11 +317,12 @@ class RotationEngine extends EventEmitter {
   // excluded because the unlocker never starts them.
   async freeGamesCheck() {
     const asfDir = this.getAsfDir ? this.getAsfDir() : null;
+    const freeGamesActive = !!(this.cfg.enabled && this.cfg.mode === 'freegames');
     let bots = {};
     try {
       bots = (await this.api.getBots()) || {};
     } catch {
-      return { ready: false, total: 0, missingProxy: [], freeGamesActive: !!this.freeGamesActive };
+      return { ready: false, total: 0, missingProxy: [], freeGamesActive };
     }
     const names = Object.keys(bots).filter((n) => !this.isStorageBot(n));
     const missingProxy = asfDir ? this._botsMissingProxy(asfDir, bots, names) : [];
@@ -321,7 +330,7 @@ class RotationEngine extends EventEmitter {
       ready: names.length > 0 && missingProxy.length === 0,
       total: names.length,
       missingProxy,
-      freeGamesActive: !!this.freeGamesActive
+      freeGamesActive
     };
   }
 
@@ -642,7 +651,8 @@ class RotationEngine extends EventEmitter {
       connectedCount: Object.values(bots).filter((b) => b.IsConnectedAndLoggedOn).length,
       maxActiveBots: this.cfg.maxActiveBots,
       stoppingAll: this.stoppingAll ? { ...this.stoppingAll } : null,
-      freeGamesActive: !!this.freeGamesActive,
+      freeGamesActive: !!(this.cfg.enabled && this.cfg.mode === 'freegames'),
+      mode: this.cfg.mode,
       recent: this.recent.slice(-30).reverse(),
       lastTick: now
     };

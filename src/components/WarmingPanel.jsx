@@ -76,6 +76,7 @@ export default function WarmingPanel() {
       }
       await asf.rotationSet({
         enabled: true,
+        mode: 'warming',
         maxActiveBots: Number(form.maxActiveBots),
         minHours: Number(form.minHours),
         maxHours: Number(form.maxHours)
@@ -136,14 +137,14 @@ export default function WarmingPanel() {
           <h2 className="text-base font-bold text-white">Warming Engine</h2>
           <span
             className={`chip ${
-              cfg.enabled
-                ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300'
-                : freeGamesActive
-                  ? 'border-amber-400/30 bg-amber-400/10 text-amber-300'
+              freeGamesActive
+                ? 'border-amber-400/30 bg-amber-400/10 text-amber-300'
+                : cfg.enabled
+                  ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300'
                   : 'border-slate-500/30 bg-slate-500/10 text-slate-400'
             }`}
           >
-            {cfg.enabled ? 'Running' : freeGamesActive ? 'FreeGames mode' : 'Stopped'}
+            {freeGamesActive ? 'FreeGames mode' : cfg.enabled ? 'Running' : 'Stopped'}
           </span>
         </div>
         <p className="mb-4 text-xs text-slate-500">
@@ -191,7 +192,7 @@ export default function WarmingPanel() {
                             ? ` (${fgCheck.missingProxy.length} missing: ${fgCheck.missingProxy.slice(0, 5).join(', ')}${fgCheck.missingProxy.length > 5 ? '…' : ''})`
                             : ''
                         }`
-                      : 'Bring every account ONLINE without farming (no card farming, no hour idling) so the FreePackages plugin only redeems free games. Requires one proxy per account. Use Stop to go offline again.'
+                      : 'Bring accounts ONLINE without farming (no card farming, no hour idling) so the FreePackages plugin only redeems free games. Respects Max Active Bots and Min/Max Uptime, rotating accounts like normal warming. Requires one proxy per account. Use Stop to go offline again.'
             }
             block
           >
