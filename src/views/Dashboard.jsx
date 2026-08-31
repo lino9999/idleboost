@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Loader2, RefreshCw, Search, Users } from 'lucide-react';
 import BotCard from '../components/BotCard';
 import WarmingPanel from '../components/WarmingPanel';
@@ -70,7 +70,7 @@ function BotsSkeleton({ message }) {
 }
 
 export default function Dashboard() {
-  const { standby, toast, status } = useApp();
+  const { standby, toast } = useApp();
   const [bots, setBots] = useState({});
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
@@ -83,30 +83,17 @@ export default function Dashboard() {
   const [dbWallet, setDbWallet] = useState({});
   const [isStorageByName, setIsStorageByName] = useState({});
   const [rotInfo, setRotInfo] = useState({ activeCount: 0, maxActiveBots: 50 });
-  const [emptyConfirmed, setEmptyConfirmed] = useState(false);
-  const emptyStreak = useRef(0);
-  const statusRef = useRef(status);
-
-  useEffect(() => {
-    statusRef.current = status;
-  }, [status]);
+  const [botCount, setBotCount] = useState(0);
 
   const load = useCallback(async () => {
+    // Bot-config count comes straight from disk, so it is available even while
+    // ASF IPC is still down: it lets us keep the loading skeleton visible until
+    // the accounts really show up (instead of flashing "no bots imported").
+    asf.configBotCount().then((c) => setBotCount(Number(c) || 0)).catch(() => {});
     try {
       const data = await asf.getBots();
       setBots(data || {});
       setError('');
-      // ASF answers are trusted only once it is fully online. A "0 bots" reply
-      // received while ASF is still booting (it serves IPC before the bot
-      // objects are initialized) must NOT show the "no bots imported" panel.
-      const st = statusRef.current;
-      const asfReady = !!(st && st.running && st.ipcReachable);
-      if (Object.keys(data || {}).length === 0 && asfReady) {
-        emptyStreak.current += 1;
-      } else {
-        emptyStreak.current = 0;
-      }
-      setEmptyConfirmed(emptyStreak.current >= 2);
     } catch (e) {
       setError(e.message || 'ASF IPC unreachable');
     } finally {
@@ -318,13 +305,21 @@ export default function Dashboard() {
       </div>
 
       {Object.keys(bots).length === 0 ? (
-        emptyConfirmed ? (
+        botCount > 0 || loading || error ? (
+          <BotsSkeleton
+            message={
+              botCount > 0
+                ? `Loading ${botCount} account(s)…`
+                : error
+                  ? 'Waiting for ASF - bot configs are being prepared…'
+                  : 'Loading accounts…'
+            }
+          />
+        ) : (
           <div className="card flex h-64 flex-col items-center justify-center gap-2 text-slate-500">
             <Users size={28} />
             <p className="text-sm">No bots imported yet. Use the Importers view to add accounts.</p>
           </div>
-        ) : (
-          <BotsSkeleton message={error ? 'Waiting for ASF - bot configs are being prepared…' : 'Loading accounts…'} />
         )
       ) : visible.length === 0 ? (
         <div className="card flex h-64 flex-col items-center justify-center gap-2 text-slate-500">
