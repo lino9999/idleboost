@@ -1,11 +1,12 @@
 const { EventEmitter } = require('events');
 
 const TICK_MS = 60000;
-const MIN_SYNC_DELAY_SECONDS = 60;
-// GetOwnedGames accepts a single SteamID per call, so "batching" here means
-// fetching up to this many accounts IN PARALLEL (random API key + random proxy
-// per request) instead of one account at a time.
-const MAX_PARALLEL = 15;
+const DEFAULTS = { useProxy: true, maxParallel: 15, delaySeconds: 300 };
+
+function clampInt(value, lo, hi, fallback) {
+  const n = parseInt(value, 10);
+  return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : fallback;
+}
 
 function randomOf(arr) {
   if (!arr || arr.length === 0) return null;
@@ -23,7 +24,10 @@ class LibrarySync extends EventEmitter {
     this.log = log || (() => {});
     const saved = store.get('library-sync', {}) || {};
     this.cfg = {
-      syncDelaySeconds: Math.min(Math.max(parseInt(saved.syncDelaySeconds, 10) || 300, MIN_SYNC_DELAY_SECONDS), 86400)
+      useProxy: saved.useProxy !== false,
+      maxParallel: clampInt(saved.maxParallel, 1, 50, DEFAULTS.maxParallel),
+      // Legacy key (syncDelaySeconds) is migrated transparently.
+      delaySeconds: clampInt(saved.delaySeconds ?? saved.syncDelaySeconds, 1, 86400, DEFAULTS.delaySeconds)
     };
     this.lastSync = saved.lastSync || {};
     this.lastProcessedAt = Number(saved.lastProcessedAt) || 0;
@@ -32,16 +36,29 @@ class LibrarySync extends EventEmitter {
     this.baselined = new Set();
   }
 
+  getConfig() {
+    return { ...this.cfg };
+  }
+
+  setConfig(patch = {}) {
+    const cfg = { ...this.cfg, ...patch };
+    cfg.useProxy = !!cfg.useProxy;
+    cfg.maxParallel = clampInt(cfg.maxParallel, 1, 50, DEFAULTS.maxParallel);
+    cfg.delaySeconds = clampInt(cfg.delaySeconds, 1, 86400, DEFAULTS.delaySeconds);
+    this.cfg = cfg;
+    this._persist();
+    this._note(
+      `Library sync settings saved - ${cfg.maxParallel} account(s) at a time, ${cfg.delaySeconds}s between batches, proxy ${cfg.useProxy ? 'on' : 'off'}`
+    );
+    return this.getConfig();
+  }
+
   getSyncDelay() {
-    return this.cfg.syncDelaySeconds;
+    return this.cfg.delaySeconds;
   }
 
   setSyncDelay(seconds) {
-    const s = Math.min(Math.max(parseInt(seconds, 10) || 300, MIN_SYNC_DELAY_SECONDS), 86400);
-    this.cfg.syncDelaySeconds = s;
-    this._persist();
-    this._note(`Library sync delay set to ${s}s`);
-    return s;
+    return this.setConfig({ delaySeconds: seconds }).delaySeconds;
   }
 
   setApiKeys(keys) {
@@ -70,21 +87,23 @@ class LibrarySync extends EventEmitter {
     const keys = this.getApiKeys();
     if (keys.length === 0) return;
     const now = Date.now();
-    // Enforce the configured delay between two consecutive sync runs. Within a
-    // run, up to MAX_PARALLEL accounts are fetched in parallel.
-    if (now - this.lastProcessedAt < this.cfg.syncDelaySeconds * 1000) return;
+    // GetOwnedGames accepts a single SteamID per call: each run fetches up to
+    // cfg.maxParallel accounts in parallel (random API key + random proxy per
+    // request when the proxy is enabled), then waits cfg.delaySeconds before the
+    // next run.
+    if (now - this.lastProcessedAt < this.cfg.delaySeconds * 1000) return;
 
     const rows = this.db.query('SELECT name, steam_id FROM bots');
-    // Oldest-synced accounts first, capped at MAX_PARALLEL per run.
+    // Oldest-synced accounts first, capped at maxParallel per run.
     const candidates = rows
       .filter((row) => row.steam_id && !this.isStorageBot(row.name) && this.isPublicBot(row.name))
       .sort((a, b) => (this.lastSync[a.name] || 0) - (this.lastSync[b.name] || 0))
-      .slice(0, MAX_PARALLEL);
+      .slice(0, this.cfg.maxParallel);
     if (candidates.length === 0) return;
 
     this.running = true;
     this.lastProcessedAt = now;
-    this._note(`Library sync started - ${candidates.length} account(s) in parallel`);
+    this._note(`Library sync started - ${candidates.length} account(s) in parallel (proxy ${this.cfg.useProxy ? 'on' : 'off'})`);
     try {
       await Promise.all(candidates.map((candidate) => this._syncOne(candidate, keys, now)));
     } finally {
@@ -133,6 +152,7 @@ class LibrarySync extends EventEmitter {
   }
 
   _pickProxy() {
+    if (!this.cfg.useProxy) return null;
     const proxies = this.store.get('proxies', {}) || {};
     const list = Object.values(proxies);
     if (list.length === 0) return null;
@@ -163,7 +183,13 @@ class LibrarySync extends EventEmitter {
   }
 
   _persist() {
-    this.store.set('library-sync', { lastSync: this.lastSync, syncDelaySeconds: this.cfg.syncDelaySeconds, lastProcessedAt: this.lastProcessedAt });
+    this.store.set('library-sync', {
+      lastSync: this.lastSync,
+      useProxy: this.cfg.useProxy,
+      maxParallel: this.cfg.maxParallel,
+      delaySeconds: this.cfg.delaySeconds,
+      lastProcessedAt: this.lastProcessedAt
+    });
   }
 
   _note(msg) {

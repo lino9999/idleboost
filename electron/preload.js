@@ -104,6 +104,8 @@ contextBridge.exposeInMainWorld('asf', {
   librarySetKeys: (keys) => invoke('library:setKeys', keys),
   libraryGetDelay: () => invoke('library:getDelay'),
   librarySetDelay: (seconds) => invoke('library:setDelay', seconds),
+  libraryGetConfig: () => invoke('library:getConfig'),
+  librarySetConfig: (patch) => invoke('library:setConfig', patch),
 
   freeGamesGet: () => invoke('freegames:get'),
   freeGamesSet: (cfg) => invoke('freegames:setConfig', cfg),

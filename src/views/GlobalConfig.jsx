@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Check, FolderOpen, KeyRound, Loader2, RefreshCw, Save, Timer, UploadCloud } from 'lucide-react';
+import { BookOpen, Check, FolderOpen, KeyRound, Loader2, RefreshCw, Save, Timer, UploadCloud } from 'lucide-react';
 import Tip from '../components/Tip';
 import Toggle from '../components/Toggle';
 import { asf } from '../lib/api';
@@ -256,11 +256,83 @@ function WebhookCard() {
   );
 }
 
+function LibrarySyncCard() {
+  const { toast } = useApp();
+  const [cfg, setCfg] = useState(null);
+  const [form, setForm] = useState({ maxParallel: 15, delaySeconds: 300 });
+
+  useEffect(() => {
+    asf.libraryGetConfig().then((c) => {
+      if (!c) return;
+      setCfg(c);
+      setForm({ maxParallel: c.maxParallel, delaySeconds: c.delaySeconds });
+    }).catch(() => {});
+  }, []);
+
+  const save = async (patch) => {
+    setCfg((c) => ({ ...(c || {}), ...patch }));
+    try {
+      await asf.librarySetConfig(patch);
+    } catch (e) {
+      toast(e.message || 'Failed to save library sync settings', 'error');
+    }
+  };
+
+  return (
+    <div className="card p-5">
+      <div className="mb-1 flex items-center gap-2">
+        <BookOpen size={17} className="text-emerald-300" />
+        <h2 className="text-base font-bold text-white">Library Sync</h2>
+      </div>
+      <p className="mb-4 text-xs leading-relaxed text-slate-500">
+        Owned-games libraries are refreshed via Steam's Web API (one account per request). The app fetches up to N
+        accounts at a time, each with a random API key - and a random proxy from Proxy Manager when proxies are enabled.
+      </p>
+
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <Tip tip="Route library-sync requests through a random proxy from Proxy Manager. Turn off to make the requests directly, without proxies." block>
+          <div className="flex items-center justify-between rounded-lg bg-night-800/70 px-3 py-2.5">
+            <span className="text-xs font-semibold text-slate-300">Use proxies</span>
+            <Toggle checked={!!(cfg && cfg.useProxy)} onChange={(v) => save({ useProxy: v })} />
+          </div>
+        </Tip>
+        <Tip tip="How many accounts are fetched in parallel per batch (1-50). Higher = faster sync, more parallel requests." block>
+          <div>
+            <label className="label">Accounts per batch</label>
+            <input
+              type="number"
+              min="1"
+              max="50"
+              className="input"
+              value={form.maxParallel}
+              onChange={(e) => setForm((f) => ({ ...f, maxParallel: e.target.value }))}
+              onBlur={() => save({ maxParallel: Number(form.maxParallel) || 15 })}
+            />
+          </div>
+        </Tip>
+        <Tip tip="Seconds to wait after each batch before the next one starts (1-86400). Lower values sync faster but use more API quota." block>
+          <div>
+            <label className="label">Delay between batches (seconds)</label>
+            <input
+              type="number"
+              min="1"
+              max="86400"
+              className="input"
+              value={form.delaySeconds}
+              onChange={(e) => setForm((f) => ({ ...f, delaySeconds: e.target.value }))}
+              onBlur={() => save({ delaySeconds: Number(form.delaySeconds) || 300 })}
+            />
+          </div>
+        </Tip>
+      </div>
+    </div>
+  );
+}
+
 function SteamApiKeysCard() {
   const { toast } = useApp();
   const [text, setText] = useState('');
   const [loaded, setLoaded] = useState(false);
-  const [delay, setDelay] = useState(300);
 
   useEffect(() => {
     asf
@@ -270,7 +342,6 @@ function SteamApiKeysCard() {
         setLoaded(true);
       })
       .catch(() => setLoaded(true));
-    asf.libraryGetDelay().then((d) => setDelay(d || 300)).catch(() => {});
   }, []);
 
   const save = async () => {
@@ -283,16 +354,6 @@ function SteamApiKeysCard() {
     }
   };
 
-  const saveDelay = async () => {
-    try {
-      const d = await asf.librarySetDelay(Number(delay) || 300);
-      setDelay(d);
-      toast(`Library sync delay set to ${d}s`, 'success');
-    } catch (e) {
-      toast(e.message || 'Failed to save delay', 'error');
-    }
-  };
-
   return (
     <div className="card p-5">
       <div className="mb-1 flex items-center gap-2">
@@ -301,8 +362,8 @@ function SteamApiKeysCard() {
       </div>
       <p className="mb-4 text-xs leading-relaxed text-slate-500">
         Used to refresh each account's owned-games library and check bans via Steam's Web API (only for accounts set to
-        public). Add one API key per line; the app uses a random key per call and a random proxy (if imported) to
-        minimize rate limits.
+        public). Add one API key per line; the app uses a random key per call and a random proxy (if enabled below in
+        Library Sync) to minimize rate limits.
       </p>
       <Tip tip="One Steam Web API key per line. Get keys at https://steamcommunity.com/dev/apikey" block>
         <textarea
@@ -312,25 +373,10 @@ function SteamApiKeysCard() {
           onChange={(e) => setText(e.target.value)}
         />
       </Tip>
-      <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-        <Tip tip="Seconds to wait between one library sync and the next for each account (minimum 60)" block>
-          <div>
-            <label className="label">Library sync delay (seconds)</label>
-            <input
-              type="number"
-              min="60"
-              className="input"
-              value={delay}
-              onChange={(e) => setDelay(e.target.value)}
-              onBlur={saveDelay}
-            />
-          </div>
-        </Tip>
-        <div className="flex items-end">
-          <button className="btn-primary" disabled={!loaded} onClick={save}>
-            <Save size={14} /> Save API keys
-          </button>
-        </div>
+      <div className="mt-3 flex items-center gap-3">
+        <button className="btn-primary" disabled={!loaded} onClick={save}>
+          <Save size={14} /> Save API keys
+        </button>
       </div>
     </div>
   );
@@ -531,6 +577,8 @@ export default function GlobalConfig() {
       <WebhookCard />
 
       <SteamApiKeysCard />
+
+      <LibrarySyncCard />
 
       <div className="card p-5">
         <h3 className="mb-2 text-sm font-bold text-white">App ↔ ASF Connection</h3>
