@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Check, KeyRound, Loader2, RefreshCw, Save, Timer, UploadCloud } from 'lucide-react';
+import { Check, FolderOpen, KeyRound, Loader2, RefreshCw, Save, Timer, UploadCloud } from 'lucide-react';
 import Tip from '../components/Tip';
 import Toggle from '../components/Toggle';
 import { asf } from '../lib/api';
@@ -336,6 +336,36 @@ function SteamApiKeysCard() {
   );
 }
 
+function LocalDataCard() {
+  const { toast } = useApp();
+
+  const openFolder = async () => {
+    try {
+      await asf.openDataFolder();
+    } catch (e) {
+      toast(e.message || 'Failed to open the data folder', 'error');
+    }
+  };
+
+  return (
+    <div className="card p-5">
+      <div className="mb-1 flex items-center gap-2">
+        <FolderOpen size={17} className="text-steam" />
+        <h2 className="text-base font-bold text-white">Local Data</h2>
+      </div>
+      <p className="mb-4 text-xs leading-relaxed text-slate-500">
+        All local files of the program live in the <code className="text-slate-400">%APPDATA%</code> folder: bot
+        configs, the local database, logs and the ASF working directory.
+      </p>
+      <Tip tip="Open the %APPDATA% folder that contains the program's local files">
+        <button className="btn-primary" onClick={openFolder}>
+          <FolderOpen size={14} /> Open data folder
+        </button>
+      </Tip>
+    </div>
+  );
+}
+
 export default function GlobalConfig() {
   const { toast } = useApp();
   const [cfg, setCfg] = useState(null);
@@ -528,6 +558,8 @@ export default function GlobalConfig() {
           </Tip>
         </div>
       </div>
+
+      <LocalDataCard />
     </div>
   );
 }

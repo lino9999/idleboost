@@ -126,5 +126,6 @@ contextBridge.exposeInMainWorld('asf', {
   appUpdateInstall: () => invoke('appupdate:install'),
   onAppUpdate: (cb) => on('appupdate:state', cb),
 
-  openExternal: (url) => invoke('shell:openExternal', url)
+  openExternal: (url) => invoke('shell:openExternal', url),
+  openDataFolder: () => invoke('shell:openDataDir')
 });
