@@ -137,8 +137,10 @@ class RotationEngine extends EventEmitter {
       throw new Error(`Active sessions are full (${this.activeCount()}/${this.cfg.maxActiveBots}) - stop a bot first`);
     }
     try {
-      const results = (await this.api.startBots([name])) || {};
-      if (results[name] === false) throw new Error('ASF refused the start');
+      // ASF's Start endpoint returns a single bool (not a per-bot map). Any
+      // definite refusal is an error; otherwise we trust the runtime state.
+      const res = await this.api.startBots([name]);
+      if (res === false) throw new Error('ASF refused the start');
     } catch (e) {
       throw new Error(`Could not start ${name}: ${e.message}`);
     }
@@ -411,16 +413,29 @@ class RotationEngine extends EventEmitter {
         slots -= 1;
       }
       if (toStart.length > 0) {
-        let results = {};
+        // ASF's multi-bot Start endpoint answers with ONE bool for the whole
+        // batch, so we cannot rely on a per-bot result map. Call it, then verify
+        // against the real runtime state: a session is created only for bots ASF
+        // is actually running (KeepRunning) - no zombie sessions, no false kills.
         try {
-          results = (await this.api.startBots(toStart)) || {};
+          await this.api.startBots(toStart);
         } catch (e) {
           this._note(`Could not start bots (${toStart.length}): ${e.message}`);
         }
+        let fresh = {};
+        try {
+          fresh = (await this.api.getBots()) || {};
+        } catch {
+          fresh = {};
+        }
+        if (Object.keys(fresh).length > 0) {
+          this.lastBots = fresh;
+        }
         for (const name of toStart) {
-          // Create a session ONLY when ASF confirmed the start - no zombie sessions.
-          if (results[name] !== true) {
-            this._note(`Could not start ${name}${results[name] === false ? ' - ASF refused the start' : ''} - retry later`);
+          const b = (Object.keys(fresh).length > 0 ? fresh : this.lastBots)[name];
+          const actuallyRunning = !!b && (b.KeepRunning === true || b.IsConnectedAndLoggedOn);
+          if (!actuallyRunning) {
+            this._note(`Could not start ${name} - retry later`);
             this.startCooldown[name] = now;
             continue;
           }
@@ -429,7 +444,7 @@ class RotationEngine extends EventEmitter {
             startedAt: Date.now(),
             expiresAt: Date.now() + Math.round(hours * 3600000),
             hours,
-            connectedEver: false
+            connectedEver: !!b.IsConnectedAndLoggedOn
           };
           this._note(`Started ${name} - uptime ${hours.toFixed(1)}h`);
           if (this.notifier) this.notifier.notify('warming', `${name} started warming (uptime ${hours.toFixed(1)}h)`);
