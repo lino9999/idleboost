@@ -311,11 +311,10 @@ class StorageManager extends EventEmitter {
     }
     this.lastBots = bots;
 
-    const sources = Object.keys(bots)
-      .filter((n) => !this.accounts[n])
-      .filter((n) => (bots[n].BotConfig ? bots[n].BotConfig.Enabled !== false : true))
-      .filter((n) => bots[n].IsConnectedAndLoggedOn || bots[n].KeepRunning === true)
-      .sort((a, b) => a.localeCompare(b));
+  const sources = Object.keys(bots)
+    .filter((n) => !this.accounts[n])
+    .filter((n) => bots[n].IsConnectedAndLoggedOn || bots[n].KeepRunning === true)
+    .sort((a, b) => a.localeCompare(b));
     if (sources.length === 0) throw new Error('No active bots found to transfer items from');
 
     const now = Date.now();

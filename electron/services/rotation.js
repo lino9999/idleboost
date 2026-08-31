@@ -137,7 +137,8 @@ class RotationEngine extends EventEmitter {
       throw new Error(`Active sessions are full (${this.activeCount()}/${this.cfg.maxActiveBots}) - stop a bot first`);
     }
     try {
-      await this.api.setBotEnabled(name, true);
+      const results = (await this.api.startBots([name])) || {};
+      if (results[name] === false) throw new Error('ASF refused the start');
     } catch (e) {
       throw new Error(`Could not start ${name}: ${e.message}`);
     }
@@ -151,7 +152,7 @@ class RotationEngine extends EventEmitter {
 
   async stopManual(name) {
     try {
-      await this.api.setBotEnabled(name, false);
+      await this.api.stopBots([name]);
     } catch (e) {
       this._note(`Failed to stop ${name}: ${e.message}`);
     }
@@ -162,22 +163,23 @@ class RotationEngine extends EventEmitter {
     return { ok: true };
   }
 
-  // Stops every enabled bot one at a time with a fixed delay in between, so the
+  // Stops every running bot one at a time with a fixed delay in between, so the
   // accounts do not all drop offline in the same instant (looks suspicious to Steam).
+  // Uses ASF's runtime Stop endpoint: no bot config file is rewritten.
   async _stopAllStaggered() {
     if (this.stoppingAll) return;
     let names = [];
     try {
       const bots = (await this.api.getBots()) || {};
       names = Object.keys(bots)
-        .filter((n) => bots[n] && bots[n].BotConfig && bots[n].BotConfig.Enabled !== false)
+        .filter((n) => bots[n] && (bots[n].KeepRunning === true || bots[n].IsConnectedAndLoggedOn))
         .sort((a, b) => a.localeCompare(b));
     } catch (e) {
       this._note(`Failed to list bots for staggered stop: ${e.message}`);
       return;
     }
     if (names.length === 0) {
-      this._note('No enabled bots to stop');
+      this._note('No running bots to stop');
       this.publish();
       return;
     }
@@ -188,7 +190,7 @@ class RotationEngine extends EventEmitter {
       for (const name of names) {
         if (!this.stoppingAll) break;
         try {
-          await this.api.setBotEnabled(name, false);
+          await this.api.stopBots([name]);
         } catch (e) {
           this._note(`Failed to stop ${name}: ${e.message}`);
         }
@@ -198,7 +200,7 @@ class RotationEngine extends EventEmitter {
         await sleep(STOP_STAGGER_MS);
       }
       if (this.stoppingAll) {
-        this._note(`Staggered stop finished - ${this.stoppingAll.stopped}/${names.length} bot(s) disabled`);
+        this._note(`Staggered stop finished - ${this.stoppingAll.stopped}/${names.length} bot(s) stopped`);
       }
     } finally {
       this.stoppingAll = null;
@@ -288,10 +290,11 @@ class RotationEngine extends EventEmitter {
       /* keep previous snapshot */
     }
 
-    // Drop manually-started bots that were disabled or removed (works even when the engine is off).
+    // Drop manually-started bots that were removed or are no longer being run by ASF
+    // (works even when the engine is off).
     for (const name of Object.keys(this.manualActive)) {
       const bot = this.lastBots[name];
-      if (!bot || (bot.BotConfig && bot.BotConfig.Enabled === false)) {
+      if (!bot || (bot.KeepRunning === false && !bot.IsConnectedAndLoggedOn)) {
         delete this.manualActive[name];
       }
     }
@@ -313,6 +316,7 @@ class RotationEngine extends EventEmitter {
     const now = Date.now();
     let changed = false;
 
+    const sessionsToStop = [];
     for (const name of Object.keys(this.sessions)) {
       const bot = bots[name];
       if (!bot) {
@@ -340,7 +344,7 @@ class RotationEngine extends EventEmitter {
           : neverConnected
             ? 'never connected within the grace period'
             : 'disconnected and did not come back';
-        this.api.setBotEnabled(name, false).catch((e) => this._note(`Failed to stop ${name}: ${e.message}`));
+        sessionsToStop.push(name);
         this._note(`Stopped ${name} - ${reason}; it will rejoin the queue`);
         delete this.sessions[name];
         this.startCooldown[name] = now;
@@ -348,6 +352,9 @@ class RotationEngine extends EventEmitter {
         this.queueOrder.push(name);
         changed = true;
       }
+    }
+    if (sessionsToStop.length > 0) {
+      this.api.stopBots(sessionsToStop).catch((e) => this._note(`Failed to stop ${sessionsToStop.join(', ')}: ${e.message}`));
     }
 
     const names = Object.keys(bots).filter((n) => !this.isStorageBot(n));
@@ -359,12 +366,10 @@ class RotationEngine extends EventEmitter {
 
     const expired = Object.keys(this.sessions).filter((n) => this.sessions[n].expiresAt <= now);
     if (expired.length) {
-      for (const n of expired) {
-        try {
-          await this.api.setBotEnabled(n, false);
-        } catch (e) {
-          this._note(`Failed to stop ${n}: ${e.message}`);
-        }
+      try {
+        await this.api.stopBots(expired);
+      } catch (e) {
+        this._note(`Failed to stop ${expired.join(', ')}: ${e.message}`);
       }
       this._note(`Stopped ${expired.join(', ')} - uptime timer expired`);
       for (const n of expired) {
@@ -390,6 +395,9 @@ class RotationEngine extends EventEmitter {
       externallyActive.length;
 
     if (slots > 0) {
+      // Collect the bots to start, then start them all with ONE multi-bot ASF
+      // call (no per-bot config rewrites).
+      const toStart = [];
       for (const name of this.queueOrder) {
         if (slots <= 0) break;
         const bot = bots[name];
@@ -399,8 +407,23 @@ class RotationEngine extends EventEmitter {
         if ((bot.RequiredInput || 0) > 0) continue;
         if (bot.IsConnectedAndLoggedOn || bot.KeepRunning === true) continue;
         if (this.startCooldown[name] && now - this.startCooldown[name] < RETRY_COOLDOWN_MS) continue;
+        toStart.push(name);
+        slots -= 1;
+      }
+      if (toStart.length > 0) {
+        let results = {};
         try {
-          await this.api.setBotEnabled(name, true);
+          results = (await this.api.startBots(toStart)) || {};
+        } catch (e) {
+          this._note(`Could not start bots (${toStart.length}): ${e.message}`);
+        }
+        for (const name of toStart) {
+          // Create a session ONLY when ASF confirmed the start - no zombie sessions.
+          if (results[name] !== true) {
+            this._note(`Could not start ${name}${results[name] === false ? ' - ASF refused the start' : ''} - retry later`);
+            this.startCooldown[name] = now;
+            continue;
+          }
           const hours = rand(this.cfg.minHours, this.cfg.maxHours);
           this.sessions[name] = {
             startedAt: Date.now(),
@@ -410,10 +433,7 @@ class RotationEngine extends EventEmitter {
           };
           this._note(`Started ${name} - uptime ${hours.toFixed(1)}h`);
           if (this.notifier) this.notifier.notify('warming', `${name} started warming (uptime ${hours.toFixed(1)}h)`);
-          slots -= 1;
           changed = true;
-        } catch (e) {
-          this._note(`Could not start ${name}: ${e.message}`);
         }
       }
     }
@@ -422,13 +442,11 @@ class RotationEngine extends EventEmitter {
       (n) => !this.sessions[n] && !this.manualActive[n] && (bots[n].IsConnectedAndLoggedOn || bots[n].KeepRunning === true)
     );
     if (runaways.length > 0) {
-      for (const n of runaways) {
-        try {
-          await this.api.setBotEnabled(n, false);
-          this._note(`Disabled ${n} - not part of the active warming sessions`);
-        } catch (e) {
-          this._note(`Failed to disable ${n}: ${e.message}`);
-        }
+      try {
+        await this.api.stopBots(runaways);
+        this._note(`Stopped ${runaways.join(', ')} - not part of the active warming sessions`);
+      } catch (e) {
+        this._note(`Failed to stop ${runaways.join(', ')}: ${e.message}`);
       }
       changed = true;
     }

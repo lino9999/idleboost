@@ -533,7 +533,10 @@ async function connectivityPoll() {
   try {
     const bots = (await api.getBots()) || {};
     const names = Object.keys(bots);
-    const enabledCount = names.filter((n) => (bots[n].BotConfig ? bots[n].BotConfig.Enabled !== false : true)).length;
+    const enabledCount = names.filter((n) => {
+      const b = bots[n] || {};
+      return b.KeepRunning === true || (b.BotConfig && b.BotConfig.Enabled !== false);
+    }).length;
     const connectedCount = names.filter((n) => bots[n].IsConnectedAndLoggedOn).length;
     const pendingInputCount = names.filter((n) => (bots[n].RequiredInput || 0) > 0).length;
     manager.noteConnectivity({ reachable: true, botCount: names.length, enabledCount, connectedCount, pendingInputCount });
