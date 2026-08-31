@@ -87,6 +87,7 @@ function applyFreePackages(asfDir, patch) {
       results.push({ bot: name, ok: false, error: 'config missing' });
       continue;
     }
+    const before = JSON.stringify(cfg);
     if (patch.enabled === true) {
       cfg.EnableFreePackages = true;
       cfg.PauseFreePackagesWhilePlaying = patch.pauseWhilePlaying !== false;
@@ -111,9 +112,15 @@ function applyFreePackages(asfDir, patch) {
     } else {
       delete cfg.FreePackagesFilters;
     }
+    // Skip the write when nothing actually changed: avoids useless disk I/O and,
+    // more importantly, avoids ASF re-loading/restarting bots for no reason.
+    if (JSON.stringify(cfg) === before) {
+      results.push({ bot: name, ok: true, written: false });
+      continue;
+    }
     try {
       writeBotConfig(asfDir, name, cfg);
-      results.push({ bot: name, ok: true });
+      results.push({ bot: name, ok: true, written: true });
     } catch (e) {
       results.push({ bot: name, ok: false, error: e.message });
     }

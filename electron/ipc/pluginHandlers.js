@@ -78,10 +78,11 @@ function register(ctx) {
     const asfDir = getAsfDir();
     const results = home.applyFreePackages(asfDir, p);
     const okResults = results.filter((r) => r.ok);
+    const written = okResults.filter((r) => r.written).length;
     const failed = results.filter((r) => !r.ok);
 
     log(
-      `[FreePackages] ${p.enabled ? 'Enabled' : 'Disabled'} free games redemption in ${okResults.length}/${results.length} bot config file(s)`
+      `[FreePackages] ${p.enabled ? 'Enabled' : 'Disabled'} free games redemption - ${written} config file(s) updated, ${okResults.length - written} already up to date`
     );
     for (const f of failed) {
       log(`[FreePackages] Could not update ${f.bot}: ${f.error}`, 'stderr');
