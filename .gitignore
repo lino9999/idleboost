@@ -4,6 +4,7 @@ node_modules/
 # Build output
 dist/
 dist-release/
+dist-new/
 
 # ArchiSteamFarm runtime (binaries + configs + secrets). Place ASF in ./asf to run.
 # NOTE: leading slash = top-level only, so electron/asf/ (source) is NOT ignored.
