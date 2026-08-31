@@ -265,7 +265,11 @@ class RotationEngine extends EventEmitter {
       if (!Array.isArray(cfg.FreePackagesFilters) || cfg.FreePackagesFilters.length === 0) {
         cfg.FreePackagesFilters = home.FREE_GAMES_DEFAULT_FILTERS;
       }
-      cfg.FarmingPreferences = (Number(cfg.FarmingPreferences) || 0) | FARMING_PAUSED_BY_DEFAULT;
+      // No card farming and no hour idling: the bot just stays online so the
+      // FreePackages plugin redeems. (Do NOT pause the farmer via
+      // FarmingPreferences: it would leave every bot showing "Paused" in ASF for
+      // no benefit - with GamesPlayedWhileIdle empty there is nothing to farm.)
+      cfg.FarmingPreferences = (Number(cfg.FarmingPreferences) || 0) & ~FARMING_PAUSED_BY_DEFAULT;
       cfg.GamesPlayedWhileIdle = [];
       // Keep Enabled false in the config: the engine starts/stops bots at runtime
       // (honoring Max Active Bots), so ASF must not auto-start every bot.

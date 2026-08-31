@@ -5,7 +5,9 @@ export function botStatus(bot) {
     const farmer = bot.CardsFarmer;
     const cardFarming = !!(farmer && farmer.NowFarming);
     if (cardFarming) return 'farming';
-    if (bot.IsPlayingPossible) return 'warming';
+    // "Warming" only when the bot is actually playing games; a connected bot that
+    // is playing nothing (e.g. FreeGames unlocker mode) is simply online.
+    if (bot.PlayingNow) return 'warming';
     return 'online';
   }
   return 'offline';
