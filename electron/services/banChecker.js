@@ -91,7 +91,13 @@ class BanChecker extends EventEmitter {
     this.running = true;
     this.stopRequested = false;
     this.publish();
-    this._note(`Ban check sweep started: ${bots.length} account(s), one every ${this.cfg.delaySeconds}s`);
+    this._note(
+      `Ban check sweep started: ${bots.length} account(s), ${
+        this.cfg.useProxy
+          ? `batched requests (up to 100 accounts per request), one batch every ${this.cfg.delaySeconds}s`
+          : `one every ${this.cfg.delaySeconds}s`
+      }`
+    );
 
     // Fire-and-forget so the UI is not blocked for the whole (long) sweep.
     this._runSweep(bots).finally(() => {
@@ -107,6 +113,9 @@ class BanChecker extends EventEmitter {
   }
 
   async _runSweep(bots) {
+    if (this.cfg.useProxy) {
+      return this._runBatchSweep(bots);
+    }
     for (let i = 0; i < bots.length; i++) {
       if (this.stopRequested) {
         this._note('Ban check sweep stopped');
@@ -312,43 +321,97 @@ class BanChecker extends EventEmitter {
       const player = json && json.players && json.players[0];
       if (!player) {
         this.status[bot.name] = { state: 'error', detail: 'No ban data returned', at: Date.now() };
-        return;
-      }
-      const banned =
-        player.CommunityBanned === true ||
-        player.VACBanned === true ||
-        Number(player.NumberOfVACBans) > 0 ||
-        Number(player.NumberOfGameBans) > 0 ||
-        (player.EconomyBan && player.EconomyBan !== 'none');
-      if (banned) {
-        const wasClean = !this.status[bot.name] || this.status[bot.name].state !== 'banned';
-        this.status[bot.name] = {
-          state: 'banned',
-          community: player.CommunityBanned === true,
-          vac: player.VACBanned === true,
-          vacBans: Number(player.NumberOfVACBans) || 0,
-          gameBans: Number(player.NumberOfGameBans) || 0,
-          economy: player.EconomyBan || 'none',
-          at: Date.now()
-        };
-        if (wasClean) {
-          this._note(`${bot.name}: BAN DETECTED (VAC:${player.VACBanned} Community:${player.CommunityBanned} Economy:${player.EconomyBan})`);
-          if (this.notifier) {
-            this.notifier.notify('ban', `BAN detected on ${bot.name} (VAC:${player.VACBanned}, Community:${player.CommunityBanned}, Economy:${player.EconomyBan})`);
-          }
-        }
       } else {
-        this.status[bot.name] = {
-          state: 'clear',
-          vacBans: Number(player.NumberOfVACBans) || 0,
-          gameBans: Number(player.NumberOfGameBans) || 0,
-          at: Date.now()
-        };
-        this._note(`${bot.name}: clear`);
+        this._applyBanResult(bot, player);
       }
     } catch (e) {
       this.status[bot.name] = { state: 'error', detail: e.message, at: Date.now() };
       this._note(`${bot.name}: ban check failed (${e.message})`);
+    }
+    this._persist();
+    this.publish();
+  }
+
+  _applyBanResult(bot, player) {
+    const banned =
+      player.CommunityBanned === true ||
+      player.VACBanned === true ||
+      Number(player.NumberOfVACBans) > 0 ||
+      Number(player.NumberOfGameBans) > 0 ||
+      (player.EconomyBan && player.EconomyBan !== 'none');
+    if (banned) {
+      const wasClean = !this.status[bot.name] || this.status[bot.name].state !== 'banned';
+      this.status[bot.name] = {
+        state: 'banned',
+        community: player.CommunityBanned === true,
+        vac: player.VACBanned === true,
+        vacBans: Number(player.NumberOfVACBans) || 0,
+        gameBans: Number(player.NumberOfGameBans) || 0,
+        economy: player.EconomyBan || 'none',
+        at: Date.now()
+      };
+      if (wasClean) {
+        this._note(`${bot.name}: BAN DETECTED (VAC:${player.VACBanned} Community:${player.CommunityBanned} Economy:${player.EconomyBan})`);
+        if (this.notifier) {
+          this.notifier.notify('ban', `BAN detected on ${bot.name} (VAC:${player.VACBanned}, Community:${player.CommunityBanned}, Economy:${player.EconomyBan})`);
+        }
+      }
+    } else {
+      this.status[bot.name] = {
+        state: 'clear',
+        vacBans: Number(player.NumberOfVACBans) || 0,
+        gameBans: Number(player.NumberOfGameBans) || 0,
+        at: Date.now()
+      };
+      this._note(`${bot.name}: clear`);
+    }
+  }
+
+  // Batched sweep: GetPlayerBans accepts up to 100 SteamIDs per request, so when
+  // the proxy toggle is on (bandwidth matters) the sweep issues ONE request per
+  // batch through one proxy instead of one request per account.
+  async _runBatchSweep(bots) {
+    const BATCH_SIZE = 100;
+    for (let i = 0; i < bots.length; i += BATCH_SIZE) {
+      if (this.stopRequested) {
+        this._note('Ban check sweep stopped');
+        break;
+      }
+      const chunk = bots.slice(i, i + BATCH_SIZE);
+      await this._checkBatch(chunk);
+      const isLast = i + BATCH_SIZE >= bots.length;
+      if (!isLast && !this.stopRequested) {
+        await this._sleepInterruptible(this.cfg.delaySeconds * 1000);
+      }
+    }
+  }
+
+  async _checkBatch(bots) {
+    const keys = this.store.get('steam-api-keys', []) || [];
+    if (keys.length === 0) return;
+    const key = randomOf(keys);
+    const steamids = bots.map((b) => b.steamId).join(',');
+    const url = `https://api.steampowered.com/ISteamUser/GetPlayerBans/v1/?key=${encodeURIComponent(key)}&steamids=${encodeURIComponent(steamids)}`;
+    try {
+      const json = await this._fetchSteamApi(url);
+      const players = json && Array.isArray(json.players) ? json.players : [];
+      const byId = new Map(players.map((p) => [String(p.SteamId), p]));
+      let cleared = 0;
+      for (const bot of bots) {
+        const player = byId.get(bot.steamId);
+        if (!player) {
+          this.status[bot.name] = { state: 'error', detail: 'No ban data returned', at: Date.now() };
+          continue;
+        }
+        this._applyBanResult(bot, player);
+        if (this.status[bot.name] && this.status[bot.name].state === 'clear') cleared += 1;
+      }
+      this._note(`Batch ban check: ${bots.length} account(s) in one request (${cleared} clear)`);
+    } catch (e) {
+      for (const bot of bots) {
+        this.status[bot.name] = { state: 'error', detail: e.message, at: Date.now() };
+      }
+      this._note(`Batch ban check failed (${e.message})`);
     }
     this._persist();
     this.publish();
